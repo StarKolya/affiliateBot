@@ -38,7 +38,8 @@ async def seed_initial_data() -> None:
     Idempotent seed for lookup tables that must exist before any business logic runs.
     Called once on startup after generate_schemas.
     """
-    from bot.models.account import Role
+    from bot.config import settings
+    from bot.models.account import Account, Role
     from bot.models.application import ApplicationStatus
 
     for name in ("user", "admin"):
@@ -46,6 +47,10 @@ async def seed_initial_data() -> None:
 
     for name in ("Processing", "Not accepted", "Bought training", "Joined team"):
         await ApplicationStatus.get_or_create(name=name)
+
+    if settings.ADMIN_TELEGRAM_IDS:
+        admin_role = await Role.get(name="admin")
+        await Account.filter(telegram_id__in=settings.ADMIN_TELEGRAM_IDS).update(role=admin_role)
 
 
 async def seed_test_data() -> None:

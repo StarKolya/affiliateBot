@@ -13,8 +13,10 @@ class Settings(BaseSettings):
     DB_NAME: str
 
     CHANNEL_ID: int
-    # Public invite/join URL shown on the subscription prompt button (optional)
     CHANNEL_URL: str | None = None
+
+    # Comma-separated telegram IDs bootstrapped as admins on first startup
+    ADMIN_TELEGRAM_IDS: list[int] = []
 
     @property
     def db_url(self) -> str:

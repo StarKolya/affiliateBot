@@ -2,13 +2,17 @@ from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
+from bot.filters import IsAdmin
+from bot.keyboards.admin_kb import admin_menu_kb
+
 router = Router(name="admin")
+router.message.filter(IsAdmin())
+router.callback_query.filter(IsAdmin())
 
 
 @router.message(Command("admin"))
 async def cmd_admin(message: Message) -> None:
-    """Admin panel entry point. Verifies role before exposing actions."""
-    ...
+    await message.answer("Welcome to the admin panel.", reply_markup=admin_menu_kb())
 
 
 # --- Job management ---
