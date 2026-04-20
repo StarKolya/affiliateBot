@@ -96,5 +96,9 @@ async def list_all_applications() -> List[JobApplication]:
     return await app_repo.get_all_with_details()
 
 
+async def list_applications_by_niche(niche_id: int) -> List[JobApplication]:
+    return await app_repo.get_by_niche(niche_id)
+
+
 async def list_user_applications(account_id: int) -> List[JobApplication]:
     return await app_repo.get_by_account(account_id)

@@ -125,27 +125,51 @@ async def callback_admin_cancel(callback: CallbackQuery, state: FSMContext) -> N
 
 @router.message(F.text == "📋 Applications")
 async def cmd_list_applications(message: Message) -> None:
-    await _show_applications(message)
+    await _show_niche_picker(message)
 
 
 @router.callback_query(F.data == "admin_list_applications")
 async def callback_list_applications(callback: CallbackQuery) -> None:
-    await _show_applications(callback.message)
+    niches = await job_service.list_all_niches()
+    if not niches:
+        await callback.message.edit_text("No niches found.")
+        await callback.answer()
+        return
+    builder = InlineKeyboardBuilder()
+    for niche in niches:
+        builder.button(text=niche.name, callback_data=f"admin_apps_niche:{niche.id}")
+    builder.adjust(1)
+    await callback.message.edit_text("Select a niche:", reply_markup=builder.as_markup())
     await callback.answer()
 
 
-async def _show_applications(target: Message) -> None:
-    applications = await application_service.list_all_applications()
-    if not applications:
-        await target.answer("No applications yet.")
+async def _show_niche_picker(target: Message) -> None:
+    niches = await job_service.list_all_niches()
+    if not niches:
+        await target.answer("No niches found.")
         return
+    builder = InlineKeyboardBuilder()
+    for niche in niches:
+        builder.button(text=niche.name, callback_data=f"admin_apps_niche:{niche.id}")
+    builder.adjust(1)
+    await target.answer("Select a niche:", reply_markup=builder.as_markup())
 
+
+@router.callback_query(F.data.startswith("admin_apps_niche:"))
+async def callback_apps_by_niche(callback: CallbackQuery) -> None:
+    niche_id = int(callback.data.split(":")[1])
+    applications = await application_service.list_applications_by_niche(niche_id)
+    if not applications:
+        await callback.answer("No applications in this niche yet.", show_alert=True)
+        return
     builder = InlineKeyboardBuilder()
     for app in applications:
         label = f"{app.account.name} — {app.job_posting.title} ({app.status.name})"
         builder.button(text=label, callback_data=f"admin_app:{app.id}")
+    builder.button(text="⬅️ Back", callback_data="admin_list_applications")
     builder.adjust(1)
-    await target.answer("Select an application:", reply_markup=builder.as_markup())
+    await callback.message.edit_text("Select an application:", reply_markup=builder.as_markup())
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("admin_app:"))
