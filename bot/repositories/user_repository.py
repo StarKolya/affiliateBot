@@ -1,7 +1,6 @@
 from typing import Optional
 
 from bot.models.account import Account, Role
-from bot.models.referral import Referral
 from bot.repositories.base import BaseRepository
 
 
@@ -28,7 +27,7 @@ class UserRepository(BaseRepository[Account]):
         surname: Optional[str],
         username: Optional[str],
         role: Role,
-        referred_by: Optional[Referral],
+        referred_by_code: Optional[str],
     ) -> Account:
         return await Account.create(
             telegram_id=telegram_id,
@@ -36,6 +35,6 @@ class UserRepository(BaseRepository[Account]):
             surname=surname,
             username=username,
             role=role,
-            referred_by=referred_by,
+            referred_by_code=referred_by_code,
             subscription_verified=False,
         )

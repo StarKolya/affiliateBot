@@ -24,16 +24,11 @@ class Account(Model):
     role: fields.ForeignKeyRelation[Role] = fields.ForeignKeyField(
         "models.Role", related_name="accounts", on_delete=fields.CASCADE
     )
-    # Referral link through which this user registered (nullable – organic signups).
-    # db_constraint=False breaks the Account ↔ Referral cyclic FK so Tortoise can
-    # determine table creation order. The ORM relationship still works normally.
-    referred_by: fields.ForeignKeyNullableRelation = fields.ForeignKeyField(
-        "models.Referral",
-        related_name="referred_accounts",
-        null=True,
-        on_delete=fields.SET_NULL,
-        db_constraint=False,
-    )
+    # Referral code used to sign up (attribution only).
+    # Stored as a plain string — not a FK — to break the Account ↔ Referral
+    # cyclic dependency that prevents Tortoise from ordering CREATE TABLE statements.
+    # Use: await Referral.get_or_none(code=account.referred_by_code) when needed.
+    referred_by_code = fields.CharField(max_length=50, null=True)
     # True once the one-time channel subscription check passed at registration
     subscription_verified = fields.BooleanField(default=False)
     created_at = fields.DatetimeField(auto_now_add=True)

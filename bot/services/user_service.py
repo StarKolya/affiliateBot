@@ -22,8 +22,8 @@ async def get_or_create_user(
     """
     Returns (account, created).
     - If the user already exists, returns it immediately — no writes.
-    - On first registration, resolves the referral code (if any) and creates
-      the account in 'Processing' state with subscription_verified=False.
+    - On first registration, validates the referral code and stores it as a
+      plain string on the account (no FK — see Account.referred_by_code).
     The subscription check is intentionally NOT done here; the handler decides
     when to trigger it.
     """
@@ -38,10 +38,13 @@ async def get_or_create_user(
             "Make sure seed_initial_data() ran on startup."
         )
 
-    referred_by = None
+    # Validate the code exists before storing it; silently drop invalid codes
+    resolved_code: Optional[str] = None
     if referral_code:
-        referred_by = await _referral_repo.get_by_code(referral_code)
-        if referred_by is None:
+        referral = await _referral_repo.get_by_code(referral_code)
+        if referral:
+            resolved_code = referral_code
+        else:
             logger.warning(
                 "Unknown referral code '%s' | telegram_id=%s — registering without referral",
                 referral_code,
@@ -54,13 +57,13 @@ async def get_or_create_user(
         surname=surname,
         username=username,
         role=default_role,
-        referred_by=referred_by,
+        referred_by_code=resolved_code,
     )
 
     logger.info(
         "New user registered | telegram_id=%s | referral_code=%s",
         telegram_id,
-        referral_code,
+        resolved_code,
     )
     return account, True
 
