@@ -1,0 +1,7 @@
+aiogram==3.15.0
+tortoise-orm==0.21.7
+asyncmy==0.2.9
+apscheduler==3.10.4
+pydantic-settings==2.7.0
+python-dotenv==1.0.1
+cryptography==43.0.3
