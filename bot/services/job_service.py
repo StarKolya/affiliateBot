@@ -18,15 +18,19 @@ job_question_repo = JobQuestionRepository()
 
 
 async def list_active_niches() -> List[Niche]:
-    ...
+    return await niche_repo.get_active_niches()
 
 
 async def list_jobs_by_niche(niche_id: int) -> List[JobPosting]:
-    ...
+    return await job_repo.get_by_niche(niche_id)
+
+
+async def get_job(job_id: int) -> Optional[JobPosting]:
+    return await job_repo.get_by_id(job_id)
 
 
 async def get_job_with_questions(job_id: int) -> Optional[JobPosting]:
-    ...
+    return await job_repo.get_with_questions(job_id)
 
 
 async def list_all_questions() -> List[Question]:

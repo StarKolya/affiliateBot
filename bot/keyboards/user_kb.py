@@ -29,10 +29,25 @@ def main_menu_kb() -> ReplyKeyboardMarkup:
 
 
 def niche_list_kb(niches) -> InlineKeyboardMarkup:
-    """Inline keyboard listing available niches."""
-    ...
+    builder = InlineKeyboardBuilder()
+    for niche in niches:
+        builder.button(text=niche.name, callback_data=f"niche:{niche.id}")
+    builder.adjust(1)
+    return builder.as_markup()
 
 
-def job_list_kb(jobs) -> InlineKeyboardMarkup:
-    """Inline keyboard listing active job postings for a niche."""
-    ...
+def job_list_kb(jobs, niche_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for job in jobs:
+        builder.button(text=job.title, callback_data=f"job:{job.id}:{niche_id}:multi")
+    builder.button(text="⬅️ Back to niches", callback_data="browse_jobs")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def job_detail_kb(job_id: int, back_callback: str) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Apply", callback_data=f"apply:{job_id}")
+    builder.button(text="⬅️ Back", callback_data=back_callback)
+    builder.adjust(1)
+    return builder.as_markup()
