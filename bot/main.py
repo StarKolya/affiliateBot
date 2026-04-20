@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 async def main() -> None:
-    setup_logging(level=logging.INFO)
+    setup_logging(level=logging.DEBUG)
     logger.info("Starting affiliate bot")
 
     await init_db()

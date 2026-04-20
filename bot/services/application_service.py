@@ -64,16 +64,37 @@ async def update_application_status(
     Change status and delegate earning creation to referral_service.
     Must be idempotent with respect to referral earnings.
     """
-    ...
+    from bot.services import referral_service
+
+    application = await app_repo.get_with_details(application_id)
+    if application is None:
+        raise ValueError(f"Application {application_id} not found")
+
+    new_status = await status_repo.get_by_name(new_status_name)
+    if new_status is None:
+        raise ValueError(f"Unknown status: {new_status_name}")
+
+    application = await app_repo.update_status(application, new_status)
+
+    if application.referral_id:
+        await referral_service.maybe_create_earning(
+            application_id=application.id,
+            referral_id=application.referral_id,
+            new_status_name=new_status_name,
+            commission=application.job_posting.commission,
+        )
+
+    logger.info("Application %s status → %s", application_id, new_status_name)
+    return application
 
 
 async def get_application(application_id: int) -> Optional[JobApplication]:
-    ...
+    return await app_repo.get_with_details(application_id)
 
 
 async def list_all_applications() -> List[JobApplication]:
-    ...
+    return await app_repo.get_all_with_details()
 
 
 async def list_user_applications(account_id: int) -> List[JobApplication]:
-    ...
+    return await app_repo.get_by_account(account_id)

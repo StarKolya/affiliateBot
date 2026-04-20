@@ -39,7 +39,23 @@ async def maybe_create_earning(
       - no earning already exists for this (referral, application) pair
     The DB unique_together on ReferralEarning provides a second safety net.
     """
-    ...
+    if new_status_name not in EARNING_TRIGGER_STATUSES:
+        return None
+
+    already = await earning_repo.earning_exists(referral_id, application_id)
+    if already:
+        return None
+
+    earning = await earning_repo.create(
+        referral_id=referral_id,
+        application_id=application_id,
+        amount=commission,
+    )
+    logger.info(
+        "Referral earning created | referral=%s application=%s amount=%s",
+        referral_id, application_id, commission,
+    )
+    return earning
 
 
 async def get_total_earned(account_id: int) -> Decimal:

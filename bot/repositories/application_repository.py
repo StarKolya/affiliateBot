@@ -19,7 +19,8 @@ class JobApplicationRepository(BaseRepository[JobApplication]):
 
     async def get_with_details(self, application_id: int) -> Optional[JobApplication]:
         return await JobApplication.get_or_none(id=application_id).prefetch_related(
-            "status", "job_posting", "referral", "answers"
+            "status", "job_posting", "referral", "account",
+            "answers__job_question__question",
         )
 
     async def get_all_with_details(self) -> List[JobApplication]:

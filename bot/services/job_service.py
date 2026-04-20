@@ -33,12 +33,25 @@ async def get_job_with_questions(job_id: int) -> Optional[JobPosting]:
     return await job_repo.get_with_questions(job_id)
 
 
+async def list_all_niches() -> List[Niche]:
+    return await niche_repo.get_all()
+
+
 async def list_all_questions() -> List[Question]:
     ...
 
 
-async def create_job_posting(niche_id: int, title: str, type: str, commission: float) -> JobPosting:
-    ...
+async def create_job_posting(
+    niche_id: int, title: str, job_type: str, commission: float, description: str | None = None
+) -> JobPosting:
+    return await job_repo.create(
+        niche_id=niche_id,
+        title=title,
+        type=job_type,
+        commission=commission,
+        description=description,
+        status="active",
+    )
 
 
 async def delete_job_posting(job_id: int) -> None:

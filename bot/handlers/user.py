@@ -124,6 +124,7 @@ async def callback_browse_jobs(callback: CallbackQuery) -> None:
 async def callback_select_niche(callback: CallbackQuery) -> None:
     niche_id = int(callback.data.split(":")[1])
     jobs = await job_service.list_jobs_by_niche(niche_id)
+    logger.info("Niche selected | telegram_id=%s niche_id=%s jobs_found=%s", callback.from_user.id, niche_id, len(jobs))
     if not jobs:
         await callback.answer("No jobs available in this niche right now.", show_alert=True)
         return
@@ -144,6 +145,7 @@ async def callback_select_niche(callback: CallbackQuery) -> None:
 async def callback_job_detail(callback: CallbackQuery) -> None:
     parts = callback.data.split(":")
     job_id, niche_id = int(parts[1]), int(parts[2])
+    logger.info("Job detail viewed | telegram_id=%s job_id=%s", callback.from_user.id, job_id)
     job = await job_service.get_job(job_id)
     if job is None:
         await callback.answer("Job no longer available.", show_alert=True)
@@ -241,7 +243,3 @@ async def fsm_collect_answer(message: Message, state: FSMContext) -> None:
     await message.answer("✅ Your application has been submitted!")
 
 
-@router.message()
-async def handle_message(message: Message) -> None:
-    """Catch-all placeholder for future FSM-driven flows."""
-    ...
