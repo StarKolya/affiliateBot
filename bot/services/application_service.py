@@ -27,9 +27,9 @@ async def start_application(
     if already:
         raise ValueError("already_applied")
 
-    processing = await status_repo.get_by_name("Processing")
+    processing = await status_repo.get_by_name("Pending")
     if processing is None:
-        raise RuntimeError("ApplicationStatus 'Processing' missing — run seed_initial_data()")
+        raise RuntimeError("ApplicationStatus 'Pending' missing — run seed_initial_data()")
 
     referral_id: Optional[int] = None
     if referred_by_code:
@@ -81,7 +81,9 @@ async def update_application_status(
             application_id=application.id,
             referral_id=application.referral_id,
             new_status_name=new_status_name,
+            job_type=application.job_posting.type,
             commission=application.job_posting.commission,
+            commission_secondary=application.job_posting.commission_secondary,
         )
 
     logger.info("Application %s status → %s", application_id, new_status_name)

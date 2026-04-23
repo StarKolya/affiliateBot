@@ -100,18 +100,50 @@ async def fsm_enter_commission(message: Message, state: FSMContext) -> None:
         await message.answer("Please enter a valid number (e.g. 500 or 250.50):")
         return
 
+    await state.update_data(commission=commission)
+    data = await state.get_data()
+
+    if data["job_type"] == "offer":
+        await state.set_state(CreateJobStates.enter_commission_secondary)
+        await message.answer(
+            "Enter the commission for <b>Bought Course</b> status (or tap Skip):",
+            reply_markup=skip_kb(),
+        )
+    else:
+        await _finish_create_job(message, state)
+
+
+@router.callback_query(CreateJobStates.enter_commission_secondary, F.data == "admin_skip")
+async def fsm_skip_commission_secondary(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.update_data(commission_secondary=None)
+    await _finish_create_job(callback.message, state)
+    await callback.answer()
+
+
+@router.message(CreateJobStates.enter_commission_secondary)
+async def fsm_enter_commission_secondary(message: Message, state: FSMContext) -> None:
+    try:
+        commission_secondary = float(message.text.replace(",", "."))
+    except ValueError:
+        await message.answer("Please enter a valid number or tap Skip:")
+        return
+    await state.update_data(commission_secondary=commission_secondary)
+    await _finish_create_job(message, state)
+
+
+async def _finish_create_job(target: Message, state: FSMContext) -> None:
     data = await state.get_data()
     await state.clear()
-
     job = await job_service.create_job_posting(
         niche_id=data["niche_id"],
         title=data["title"],
         job_type=data["job_type"],
-        commission=commission,
+        commission=data["commission"],
+        commission_secondary=data.get("commission_secondary"),
         description=data.get("description"),
     )
     logger.info("Job created | id=%s title=%s", job.id, job.title)
-    await message.answer(
+    await target.answer(
         f"✅ Job <b>{job.title}</b> created successfully.",
         reply_markup=admin_menu_kb(),
     )
@@ -348,7 +380,7 @@ async def callback_view_application(callback: CallbackQuery) -> None:
 
     await callback.message.edit_text(
         "\n".join(lines),
-        reply_markup=application_status_kb(app.id, app.status.name),
+        reply_markup=application_status_kb(app.id, app.status.name, app.job_posting.type),
     )
     await callback.answer()
 
@@ -364,7 +396,7 @@ async def callback_update_status(callback: CallbackQuery) -> None:
         return
 
     await callback.message.edit_reply_markup(
-        reply_markup=application_status_kb(app.id, app.status.name)
+        reply_markup=application_status_kb(app.id, app.status.name, app.job_posting.type)
     )
     await callback.answer(f"Status updated to: {new_status}")
 

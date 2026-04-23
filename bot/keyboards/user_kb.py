@@ -53,8 +53,48 @@ def job_detail_kb(job_id: int, back_callback: str) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def referral_links_kb() -> InlineKeyboardMarkup:
+REFERRAL_PAGE_SIZE = 5
+
+
+def referral_menu_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📊 Stats", callback_data="referral_stats")
+    builder.button(text="🔗 My Links", callback_data="referral_links")
+    builder.adjust(2)
+    return builder.as_markup()
+
+
+def referral_stats_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="💰 Request Payout", callback_data="payout_request")
+    builder.button(text="⬅️ Back", callback_data="referral_menu")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def referral_links_list_kb(links, page: int, total_pages: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="➕ Create New Link", callback_data="referral_create")
+    for link in links:
+        builder.button(text=link.name, callback_data=f"referral_detail:{link.id}")
+    nav = []
+    if page > 0:
+        nav.append(("◀️", f"referral_page:{page - 1}"))
+    if page < total_pages - 1:
+        nav.append(("▶️", f"referral_page:{page + 1}"))
+    for text, cb in nav:
+        builder.button(text=text, callback_data=cb)
+    builder.button(text="⬅️ Back", callback_data="referral_menu")
+    row_sizes = [1] + [1] * len(links)
+    if nav:
+        row_sizes.append(len(nav))
+    row_sizes.append(1)
+    builder.adjust(*row_sizes)
+    return builder.as_markup()
+
+
+def referral_detail_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⬅️ Back to links", callback_data="referral_links")
     builder.adjust(1)
     return builder.as_markup()

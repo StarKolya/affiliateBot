@@ -45,7 +45,7 @@ async def seed_initial_data() -> None:
     for name in ("user", "admin"):
         await Role.get_or_create(name=name)
 
-    for name in ("Processing", "Not accepted", "Bought training", "Joined team"):
+    for name in ("Pending", "Declined", "Deal Closed", "Joined Team", "Bought Course"):
         await ApplicationStatus.get_or_create(name=name)
 
     if settings.ADMIN_TELEGRAM_IDS:
@@ -85,8 +85,9 @@ async def seed_test_data() -> None:
         defaults={
             "niche": hr,
             "description": "We are looking for an experienced recruiter to join our HR team.",
-            "type": "full-time",
+            "type": "offer",
             "commission": 500,
+            "commission_secondary": 200,
             "status": "active",
         },
     )
@@ -95,18 +96,19 @@ async def seed_test_data() -> None:
         defaults={
             "niche": it,
             "description": "Join our backend team and build scalable Python services.",
-            "type": "full-time",
+            "type": "offer",
             "commission": 800,
+            "commission_secondary": 300,
             "status": "active",
         },
     )
     job3, _ = await JobPosting.get_or_create(
-        title="Junior IT Support",
+        title="IT Partnership",
         defaults={
             "niche": it,
-            "description": "First-line support role, great entry point into IT.",
-            "type": "part-time",
-            "commission": 200,
+            "description": "Strategic partnership opportunity in the IT space.",
+            "type": "partnership",
+            "commission": 1500,
             "status": "active",
         },
     )

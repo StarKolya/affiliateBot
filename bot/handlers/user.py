@@ -5,7 +5,18 @@ from aiogram.types import CallbackQuery, Message
 
 from bot.config import settings
 from bot.handlers.states import ApplyStates, CreateReferralStates
-from bot.keyboards.user_kb import job_detail_kb, job_list_kb, main_menu_kb, niche_list_kb, referral_links_kb, subscription_check_kb
+from bot.keyboards.user_kb import (
+    REFERRAL_PAGE_SIZE,
+    job_detail_kb,
+    job_list_kb,
+    main_menu_kb,
+    niche_list_kb,
+    referral_detail_kb,
+    referral_links_list_kb,
+    referral_menu_kb,
+    referral_stats_kb,
+    subscription_check_kb,
+)
 from bot.services import application_service, job_service, referral_service, user_service
 from bot.utils.logger import get_logger
 from bot.utils.telegram import is_channel_member
@@ -258,33 +269,87 @@ async def fsm_collect_answer(message: Message, state: FSMContext) -> None:
 
 @router.message(F.text == "🔗 Referral Links")
 async def cmd_referral_links(message: Message) -> None:
-    account = await user_service.get_by_telegram_id(message.from_user.id)
-    if account is None:
-        return
-    await _show_referral_links(message, account)
+    await message.answer(
+        "👥 <b>Referral Program</b>\n\n"
+        "Create referral links, share them, and earn commission every time "
+        "someone you referred gets hired.",
+        reply_markup=referral_menu_kb(),
+    )
 
 
-async def _show_referral_links(target: Message, account) -> None:
-    referrals = await referral_service.list_user_referrals(account.id)
+@router.callback_query(F.data == "referral_menu")
+async def callback_referral_menu(callback: CallbackQuery) -> None:
+    await callback.message.edit_text(
+        "👥 <b>Referral Program</b>\n\n"
+        "Create referral links, share them, and earn commission every time "
+        "someone you referred gets hired.",
+        reply_markup=referral_menu_kb(),
+    )
+    await callback.answer()
 
-    if not referrals:
-        text = "You have no referral links yet.\n\nCreate one to start earning!"
+
+@router.callback_query(F.data == "referral_stats")
+async def callback_referral_stats(callback: CallbackQuery) -> None:
+    account = await user_service.get_by_telegram_id(callback.from_user.id)
+    stats = await referral_service.get_account_stats(account.id)
+    await callback.message.edit_text(
+        f"📊 <b>Your Stats</b>\n\n"
+        f"👥 Total referred: {stats.total_referred}\n"
+        f"📝 Applications submitted: {stats.total_applications}\n"
+        f"💰 Total earned: ${stats.total_earned:.2f}",
+        reply_markup=referral_stats_kb(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "referral_links")
+async def callback_referral_links(callback: CallbackQuery) -> None:
+    await _show_links_page(callback.message, callback.from_user.id, page=0)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("referral_page:"))
+async def callback_referral_page(callback: CallbackQuery) -> None:
+    page = int(callback.data.split(":")[1])
+    await _show_links_page(callback.message, callback.from_user.id, page=page)
+    await callback.answer()
+
+
+async def _show_links_page(target: Message, telegram_id: int, page: int) -> None:
+    account = await user_service.get_by_telegram_id(telegram_id)
+    links = await referral_service.list_user_referrals(account.id)
+    total_pages = max(1, -(-len(links) // REFERRAL_PAGE_SIZE))
+    page = min(page, total_pages - 1)
+    page_links = links[page * REFERRAL_PAGE_SIZE:(page + 1) * REFERRAL_PAGE_SIZE]
+
+    if links:
+        text = f"🔗 <b>Your Links</b>  (page {page + 1}/{total_pages})"
     else:
-        lines = ["🔗 <b>Your Referral Links</b>\n"]
-        for i, referral in enumerate(referrals, 1):
-            stats = await referral_service.get_referral_stats(referral)
-            link = f"https://t.me/{settings.BOT_USERNAME}?start=ref={referral.code}"
-            lines += [
-                f"<b>{i}. {referral.name}</b>",
-                f"👥 Referred: {stats.referred_users}",
-                f"📝 Applications: {stats.applications}",
-                f"💰 Earned: ${stats.earned:.2f}",
-                f"🔗 <code>{link}</code>",
-                "",
-            ]
-        text = "\n".join(lines).strip()
+        text = "🔗 <b>Your Links</b>\n\nYou have no referral links yet. Create one to start earning!"
 
-    await target.answer(text, reply_markup=referral_links_kb())
+    await target.edit_text(text, reply_markup=referral_links_list_kb(page_links, page, total_pages))
+
+
+@router.callback_query(F.data.startswith("referral_detail:"))
+async def callback_referral_detail(callback: CallbackQuery) -> None:
+    referral_id = int(callback.data.split(":")[1])
+    account = await user_service.get_by_telegram_id(callback.from_user.id)
+    links = await referral_service.list_user_referrals(account.id)
+    referral = next((r for r in links if r.id == referral_id), None)
+    if referral is None:
+        await callback.answer("Link not found.", show_alert=True)
+        return
+    stats = await referral_service.get_referral_stats(referral)
+    link = f"https://t.me/{settings.BOT_USERNAME}?start=ref={referral.code}"
+    await callback.message.edit_text(
+        f"🔗 <b>{referral.name}</b>\n\n"
+        f"👥 Referred: {stats.referred_users}\n"
+        f"📝 Applications: {stats.applications}\n"
+        f"💰 Earned: ${stats.earned:.2f}\n\n"
+        f"<code>{link}</code>",
+        reply_markup=referral_detail_kb(),
+    )
+    await callback.answer()
 
 
 @router.callback_query(F.data == "referral_create")
@@ -309,8 +374,8 @@ async def fsm_referral_enter_name(message: Message, state: FSMContext) -> None:
     referral = await referral_service.create_referral_link(account_id=account.id, name=name)
     link = f"https://t.me/{settings.BOT_USERNAME}?start=ref={referral.code}"
     await message.answer(
-        f"✅ Link <b>{referral.name}</b> created!\n\n"
-        f"🔗 <code>{link}</code>\n\n"
+        f"✅ <b>{referral.name}</b> created!\n\n"
+        f"<code>{link}</code>\n\n"
         "Share this link — you'll earn commission when your referrals get hired.",
-        reply_markup=referral_links_kb(),
+        reply_markup=referral_menu_kb(),
     )

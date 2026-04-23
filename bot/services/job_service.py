@@ -42,13 +42,19 @@ async def list_all_questions() -> List[Question]:
 
 
 async def create_job_posting(
-    niche_id: int, title: str, job_type: str, commission: float, description: str | None = None
+    niche_id: int,
+    title: str,
+    job_type: str,
+    commission: float,
+    commission_secondary: float | None = None,
+    description: str | None = None,
 ) -> JobPosting:
     return await job_repo.create(
         niche_id=niche_id,
         title=title,
         type=job_type,
         commission=commission,
+        commission_secondary=commission_secondary,
         description=description,
         status="active",
     )

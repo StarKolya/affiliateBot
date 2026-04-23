@@ -1,7 +1,12 @@
 from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
-JOB_TYPES = ("full-time", "part-time", "contract")
+JOB_TYPES = ("partnership", "offer")
+
+STATUSES_BY_TYPE: dict[str, tuple] = {
+    "partnership": ("Pending", "Declined", "Deal Closed"),
+    "offer": ("Pending", "Declined", "Joined Team", "Bought Course"),
+}
 
 
 def admin_menu_kb() -> ReplyKeyboardMarkup:
@@ -84,14 +89,12 @@ def application_filter_kb(numeric_questions: list, active_filters: dict) -> Inli
     return builder.as_markup()
 
 
-APPLICATION_STATUSES = ("Processing", "Not accepted", "Bought training", "Joined team")
-
-
-def application_status_kb(application_id: int, current_status: str) -> InlineKeyboardMarkup:
+def application_status_kb(application_id: int, current_status: str, job_type: str) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    for status in APPLICATION_STATUSES:
+    statuses = STATUSES_BY_TYPE.get(job_type, ("Pending", "Declined"))
+    for status in statuses:
         if status == current_status:
-            builder.button(text=f"✅ {status}", callback_data=f"app_status_noop")
+            builder.button(text=f"✅ {status}", callback_data="app_status_noop")
         else:
             builder.button(text=status, callback_data=f"app_status:{application_id}:{status}")
     builder.button(text="⬅️ Back", callback_data="admin_list_applications")

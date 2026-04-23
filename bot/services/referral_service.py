@@ -14,8 +14,17 @@ logger = get_logger(__name__)
 referral_repo = ReferralRepository()
 earning_repo = ReferralEarningRepository()
 
-# Status names that trigger a referral earning when an application reaches them
-EARNING_TRIGGER_STATUSES = {"Bought training"}
+# Maps job_type → {status_name: commission_field}
+# "primary" = job.commission, "secondary" = job.commission_secondary
+EARNING_TRIGGERS: dict[str, dict[str, str]] = {
+    "partnership": {
+        "Deal Closed": "primary",
+    },
+    "offer": {
+        "Joined Team": "primary",
+        "Bought Course": "secondary",
+    },
+}
 
 
 @dataclass
@@ -24,6 +33,13 @@ class ReferralStats:
     referred_users: int
     applications: int
     earned: Decimal
+
+
+@dataclass
+class AccountReferralStats:
+    total_referred: int
+    total_applications: int
+    total_earned: Decimal
 
 
 async def create_referral_link(account_id: int, name: str) -> Referral:
@@ -43,6 +59,19 @@ async def list_user_referrals(account_id: int) -> List[Referral]:
     return await referral_repo.get_by_account(account_id)
 
 
+async def get_account_stats(account_id: int) -> AccountReferralStats:
+    referrals = await referral_repo.get_by_account(account_id)
+    codes = [r.code for r in referrals]
+    total_referred = await Account.filter(referred_by_code__in=codes).count() if codes else 0
+    total_applications = await JobApplication.filter(referral__account_id=account_id).count()
+    total_earned = await earning_repo.get_total_earned(account_id)
+    return AccountReferralStats(
+        total_referred=total_referred,
+        total_applications=total_applications,
+        total_earned=total_earned,
+    )
+
+
 async def get_referral_stats(referral: Referral) -> ReferralStats:
     referred_users = await Account.filter(referred_by_code=referral.code).count()
     applications = await JobApplication.filter(referral_id=referral.id).count()
@@ -59,15 +88,22 @@ async def maybe_create_earning(
     application_id: int,
     referral_id: int,
     new_status_name: str,
+    job_type: str,
     commission: Decimal,
+    commission_secondary: Optional[Decimal] = None,
 ) -> Optional[ReferralEarning]:
     """
-    Idempotent: creates a ReferralEarning only when:
-      - new_status_name is in EARNING_TRIGGER_STATUSES
-      - no earning already exists for this (referral, application) pair
-    The DB unique_together on ReferralEarning provides a second safety net.
+    Idempotent: creates a ReferralEarning only when the new status is a
+    trigger for the given job type. Amount depends on which trigger fired.
+    DB unique_together on ReferralEarning is the second idempotency guard.
     """
-    if new_status_name not in EARNING_TRIGGER_STATUSES:
+    triggers = EARNING_TRIGGERS.get(job_type, {})
+    commission_field = triggers.get(new_status_name)
+    if commission_field is None:
+        return None
+
+    amount = commission if commission_field == "primary" else (commission_secondary or Decimal("0"))
+    if amount <= 0:
         return None
 
     already = await earning_repo.earning_exists(referral_id, application_id)
@@ -77,11 +113,11 @@ async def maybe_create_earning(
     earning = await earning_repo.create(
         referral_id=referral_id,
         application_id=application_id,
-        amount=commission,
+        amount=amount,
     )
     logger.info(
-        "Referral earning created | referral=%s application=%s amount=%s",
-        referral_id, application_id, commission,
+        "Referral earning created | referral=%s application=%s status=%s amount=%s",
+        referral_id, application_id, new_status_name, amount,
     )
     return earning
 

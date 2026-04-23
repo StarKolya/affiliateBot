@@ -26,7 +26,10 @@ class JobPosting(Model):
     status = fields.CharField(max_length=15, default="active")
     # e.g. "full-time" | "part-time" | "contract"
     type = fields.CharField(max_length=15)
+    # Primary commission: Deal Closed (partnership) / Joined Team (offer)
     commission = fields.DecimalField(max_digits=8, decimal_places=2, default=0)
+    # Secondary commission: Bought Course (offer only)
+    commission_secondary = fields.DecimalField(max_digits=8, decimal_places=2, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
 
     class Meta:
