@@ -38,7 +38,7 @@ async def list_all_niches() -> List[Niche]:
 
 
 async def list_all_questions() -> List[Question]:
-    ...
+    return await question_repo.get_all()
 
 
 async def create_job_posting(
@@ -65,7 +65,7 @@ async def delete_job_posting(job_id: int) -> None:
 
 
 async def assign_question_to_job(job_id: int, question_id: int, order: int = 0) -> JobQuestion:
-    ...
+    return await job_question_repo.assign_question(job_id, question_id, order)
 
 
 async def remove_question_from_job(job_id: int, question_id: int) -> None:

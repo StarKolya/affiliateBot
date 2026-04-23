@@ -51,6 +51,35 @@ def skip_kb() -> InlineKeyboardMarkup:
 
 
 APPS_PAGE_SIZE = 5
+QUESTIONS_PAGE_SIZE = 5
+
+
+def question_select_kb(
+    questions, selected_ids: set, page: int, total_pages: int
+) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for q in questions:
+        label = q.description if len(q.description) <= 40 else q.description[:37] + "..."
+        if q.id in selected_ids:
+            label = f"{label} +"
+        builder.button(text=label, callback_data=f"admin_q_toggle:{q.id}")
+
+    nav = []
+    if page > 0:
+        nav.append(("◀️", f"admin_q_page:{page - 1}"))
+    if page < total_pages - 1:
+        nav.append(("▶️", f"admin_q_page:{page + 1}"))
+    for text, cb in nav:
+        builder.button(text=text, callback_data=cb)
+
+    builder.button(text="Confirm", callback_data="admin_q_confirm")
+
+    rows = [1] * len(questions)
+    if nav:
+        rows.append(len(nav))
+    rows.append(1)
+    builder.adjust(*rows)
+    return builder.as_markup()
 
 
 def applications_page_kb(apps, page: int, total_pages: int, has_filters: bool) -> InlineKeyboardMarkup:

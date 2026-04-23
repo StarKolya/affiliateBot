@@ -12,6 +12,7 @@ class CreateJobStates(StatesGroup):
     enter_description = State()
     enter_commission = State()
     enter_commission_secondary = State()
+    select_questions = State()
 
 
 class FilterApplicationsStates(StatesGroup):

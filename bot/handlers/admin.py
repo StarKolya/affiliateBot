@@ -8,6 +8,7 @@ from bot.filters import IsAdmin
 from bot.handlers.states import CreateJobStates, FilterApplicationsStates
 from bot.keyboards.admin_kb import (
     APPS_PAGE_SIZE,
+    QUESTIONS_PAGE_SIZE,
     admin_menu_kb,
     admin_niche_select_kb,
     application_filter_kb,
@@ -15,6 +16,7 @@ from bot.keyboards.admin_kb import (
     applications_page_kb,
     job_type_kb,
     jobs_menu_kb,
+    question_select_kb,
     skip_kb,
 )
 from bot.services import application_service, job_service
@@ -110,13 +112,13 @@ async def fsm_enter_commission(message: Message, state: FSMContext) -> None:
             reply_markup=skip_kb(),
         )
     else:
-        await _finish_create_job(message, state)
+        await _show_question_select(message, state)
 
 
 @router.callback_query(CreateJobStates.enter_commission_secondary, F.data == "admin_skip")
 async def fsm_skip_commission_secondary(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(commission_secondary=None)
-    await _finish_create_job(callback.message, state)
+    await _show_question_select(callback.message, state)
     await callback.answer()
 
 
@@ -128,10 +130,25 @@ async def fsm_enter_commission_secondary(message: Message, state: FSMContext) ->
         await message.answer("Please enter a valid number or tap Skip:")
         return
     await state.update_data(commission_secondary=commission_secondary)
-    await _finish_create_job(message, state)
+    await _show_question_select(message, state)
 
 
-async def _finish_create_job(target: Message, state: FSMContext) -> None:
+async def _show_question_select(target: Message, state: FSMContext) -> None:
+    questions = await job_service.list_all_questions()
+    if not questions:
+        await _finish_create_job(target, state, selected_ids=[])
+        return
+    await state.update_data(selected_question_ids=[], question_page=0)
+    await state.set_state(CreateJobStates.select_questions)
+    total_pages = (len(questions) + QUESTIONS_PAGE_SIZE - 1) // QUESTIONS_PAGE_SIZE
+    page_questions = questions[:QUESTIONS_PAGE_SIZE]
+    await target.answer(
+        "Choose questions to attach to this job:",
+        reply_markup=question_select_kb(page_questions, set(), 0, total_pages),
+    )
+
+
+async def _finish_create_job(target: Message, state: FSMContext, selected_ids: list) -> None:
     data = await state.get_data()
     await state.clear()
     job = await job_service.create_job_posting(
@@ -142,11 +159,60 @@ async def _finish_create_job(target: Message, state: FSMContext) -> None:
         commission_secondary=data.get("commission_secondary"),
         description=data.get("description"),
     )
-    logger.info("Job created | id=%s title=%s", job.id, job.title)
+    questions = await job_service.list_all_questions()
+    selected_set = set(selected_ids)
+    for order, q in enumerate(q for q in questions if q.id in selected_set):
+        await job_service.assign_question_to_job(job.id, q.id, order=order)
+    logger.info("Job created | id=%s title=%s questions=%s", job.id, job.title, selected_ids)
     await target.answer(
         f"✅ Job <b>{job.title}</b> created successfully.",
         reply_markup=admin_menu_kb(),
     )
+
+
+@router.callback_query(CreateJobStates.select_questions, F.data.startswith("admin_q_toggle:"))
+async def fsm_toggle_question(callback: CallbackQuery, state: FSMContext) -> None:
+    question_id = int(callback.data.split(":")[1])
+    data = await state.get_data()
+    selected = set(data.get("selected_question_ids", []))
+    if question_id in selected:
+        selected.discard(question_id)
+    else:
+        selected.add(question_id)
+    await state.update_data(selected_question_ids=list(selected))
+
+    questions = await job_service.list_all_questions()
+    page = data.get("question_page", 0)
+    total_pages = (len(questions) + QUESTIONS_PAGE_SIZE - 1) // QUESTIONS_PAGE_SIZE
+    page_questions = questions[page * QUESTIONS_PAGE_SIZE : (page + 1) * QUESTIONS_PAGE_SIZE]
+    await callback.message.edit_reply_markup(
+        reply_markup=question_select_kb(page_questions, selected, page, total_pages)
+    )
+    await callback.answer()
+
+
+@router.callback_query(CreateJobStates.select_questions, F.data.startswith("admin_q_page:"))
+async def fsm_question_page(callback: CallbackQuery, state: FSMContext) -> None:
+    page = int(callback.data.split(":")[1])
+    await state.update_data(question_page=page)
+    data = await state.get_data()
+    selected = set(data.get("selected_question_ids", []))
+
+    questions = await job_service.list_all_questions()
+    total_pages = (len(questions) + QUESTIONS_PAGE_SIZE - 1) // QUESTIONS_PAGE_SIZE
+    page_questions = questions[page * QUESTIONS_PAGE_SIZE : (page + 1) * QUESTIONS_PAGE_SIZE]
+    await callback.message.edit_reply_markup(
+        reply_markup=question_select_kb(page_questions, selected, page, total_pages)
+    )
+    await callback.answer()
+
+
+@router.callback_query(CreateJobStates.select_questions, F.data == "admin_q_confirm")
+async def fsm_confirm_questions(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    selected_ids = data.get("selected_question_ids", [])
+    await _finish_create_job(callback.message, state, selected_ids=selected_ids)
+    await callback.answer()
 
 
 @router.callback_query(F.data == "admin_cancel")
