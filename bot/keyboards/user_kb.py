@@ -51,3 +51,10 @@ def job_detail_kb(job_id: int, back_callback: str) -> InlineKeyboardMarkup:
     builder.button(text="⬅️ Back", callback_data=back_callback)
     builder.adjust(1)
     return builder.as_markup()
+
+
+def referral_links_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="➕ Create New Link", callback_data="referral_create")
+    builder.adjust(1)
+    return builder.as_markup()

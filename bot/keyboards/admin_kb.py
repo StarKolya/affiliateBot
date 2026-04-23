@@ -45,6 +45,45 @@ def skip_kb() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+APPS_PAGE_SIZE = 5
+
+
+def applications_page_kb(apps, page: int, total_pages: int, has_filters: bool) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for app in apps:
+        label = f"{app.account.name} — {app.job_posting.title} ({app.status.name})"
+        builder.button(text=label, callback_data=f"admin_app:{app.id}")
+
+    nav = []
+    if page > 0:
+        nav.append(("◀️ Prev", "admin_apps_prev"))
+    filter_label = "🔍 Filters ●" if has_filters else "🔍 Filters"
+    nav.append((filter_label, "admin_apps_filters"))
+    if page < total_pages - 1:
+        nav.append(("▶️ Next", "admin_apps_next"))
+
+    for text, cb in nav:
+        builder.button(text=text, callback_data=cb)
+
+    builder.adjust(*([1] * len(apps)), len(nav))
+    return builder.as_markup()
+
+
+def application_filter_kb(numeric_questions: list, active_filters: dict) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for q in numeric_questions:
+        jq_id = str(q["jq_id"])
+        label = q["text"]
+        if jq_id in active_filters:
+            label = f"✅ {label} (min: {active_filters[jq_id]:.0f})"
+        builder.button(text=label, callback_data=f"admin_filter_set:{q['jq_id']}")
+    if active_filters:
+        builder.button(text="🗑 Clear all filters", callback_data="admin_filter_clear")
+    builder.button(text="⬅️ Back to applications", callback_data="admin_apps_back")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
 APPLICATION_STATUSES = ("Processing", "Not accepted", "Bought training", "Joined team")
 
 

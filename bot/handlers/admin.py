@@ -5,11 +5,14 @@ from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.filters import IsAdmin
-from bot.handlers.states import CreateJobStates
+from bot.handlers.states import CreateJobStates, FilterApplicationsStates
 from bot.keyboards.admin_kb import (
+    APPS_PAGE_SIZE,
     admin_menu_kb,
     admin_niche_select_kb,
+    application_filter_kb,
     application_status_kb,
+    applications_page_kb,
     job_type_kb,
     jobs_menu_kb,
     skip_kb,
@@ -124,12 +127,14 @@ async def callback_admin_cancel(callback: CallbackQuery, state: FSMContext) -> N
 # --- Application management ---
 
 @router.message(F.text == "📋 Applications")
-async def cmd_list_applications(message: Message) -> None:
+async def cmd_list_applications(message: Message, state: FSMContext) -> None:
+    await state.clear()
     await _show_niche_picker(message)
 
 
 @router.callback_query(F.data == "admin_list_applications")
-async def callback_list_applications(callback: CallbackQuery) -> None:
+async def callback_list_applications(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
     niches = await job_service.list_all_niches()
     if not niches:
         await callback.message.edit_text("No niches found.")
@@ -156,20 +161,168 @@ async def _show_niche_picker(target: Message) -> None:
 
 
 @router.callback_query(F.data.startswith("admin_apps_niche:"))
-async def callback_apps_by_niche(callback: CallbackQuery) -> None:
+async def callback_apps_by_niche(callback: CallbackQuery, state: FSMContext) -> None:
     niche_id = int(callback.data.split(":")[1])
-    applications = await application_service.list_applications_by_niche(niche_id)
-    if not applications:
-        await callback.answer("No applications in this niche yet.", show_alert=True)
-        return
-    builder = InlineKeyboardBuilder()
-    for app in applications:
-        label = f"{app.account.name} — {app.job_posting.title} ({app.status.name})"
-        builder.button(text=label, callback_data=f"admin_app:{app.id}")
-    builder.button(text="⬅️ Back", callback_data="admin_list_applications")
-    builder.adjust(1)
-    await callback.message.edit_text("Select an application:", reply_markup=builder.as_markup())
+    jobs = await job_service.list_jobs_by_niche(niche_id)
+
+    if len(jobs) > 1:
+        builder = InlineKeyboardBuilder()
+        builder.button(text="All jobs", callback_data=f"admin_apps_job:all:{niche_id}")
+        for job in jobs:
+            builder.button(text=job.title, callback_data=f"admin_apps_job:{job.id}:{niche_id}")
+        builder.button(text="⬅️ Back", callback_data="admin_list_applications")
+        builder.adjust(1)
+        await callback.message.edit_text("Select a job:", reply_markup=builder.as_markup())
+    else:
+        job_id = jobs[0].id if jobs else None
+        await _init_browse(callback, state, niche_id, job_id)
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_apps_job:"))
+async def callback_apps_by_job(callback: CallbackQuery, state: FSMContext) -> None:
+    parts = callback.data.split(":")
+    job_id_raw, niche_id = parts[1], int(parts[2])
+    job_id = None if job_id_raw == "all" else int(job_id_raw)
+    await _init_browse(callback, state, niche_id, job_id)
+    await callback.answer()
+
+
+async def _init_browse(
+    callback: CallbackQuery, state: FSMContext, niche_id: int, job_id: int | None
+) -> None:
+    numeric_questions = []
+    if job_id is not None:
+        job = await job_service.get_job_with_questions(job_id)
+        if job:
+            numeric_questions = [
+                {"jq_id": jq.id, "text": jq.question.description}
+                for jq in sorted(job.job_questions, key=lambda jq: jq.order)
+                if jq.question.expected_answer_type == "number"
+            ]
+    await state.update_data(
+        niche_id=niche_id,
+        job_id=job_id,
+        numeric_questions=numeric_questions,
+        page=0,
+        filters={},
+    )
+    await _render_applications_page(callback.message, await state.get_data())
+
+
+# --- Page navigation ---
+
+@router.callback_query(F.data == "admin_apps_next")
+async def callback_apps_next(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    await state.update_data(page=data["page"] + 1)
+    await _render_applications_page(callback.message, await state.get_data())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_apps_prev")
+async def callback_apps_prev(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    await state.update_data(page=max(0, data["page"] - 1))
+    await _render_applications_page(callback.message, await state.get_data())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_apps_back")
+async def callback_apps_back(callback: CallbackQuery, state: FSMContext) -> None:
+    await _render_applications_page(callback.message, await state.get_data())
+    await callback.answer()
+
+
+# --- Filters ---
+
+@router.callback_query(F.data == "admin_apps_filters")
+async def callback_show_filters(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    numeric_questions = data.get("numeric_questions", [])
+    if not numeric_questions:
+        await callback.answer("No numeric filters available for this job.", show_alert=True)
+        return
+    await callback.message.edit_text(
+        "Active filters:",
+        reply_markup=application_filter_kb(numeric_questions, data.get("filters", {})),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_filter_set:"))
+async def callback_filter_set(callback: CallbackQuery, state: FSMContext) -> None:
+    jq_id = int(callback.data.split(":")[1])
+    await state.set_state(FilterApplicationsStates.entering_filter)
+    await state.update_data(pending_filter_jq_id=jq_id)
+    data = await state.get_data()
+    question = next(q for q in data["numeric_questions"] if q["jq_id"] == jq_id)
+    await callback.message.edit_text(
+        f"Enter minimum value for <b>{question['text']}</b>:"
+    )
+    await callback.answer()
+
+
+@router.message(FilterApplicationsStates.entering_filter)
+async def fsm_enter_filter_value(message: Message, state: FSMContext) -> None:
+    try:
+        min_val = float(message.text.replace(",", "."))
+    except ValueError:
+        await message.answer("Please enter a valid number:")
+        return
+
+    data = await state.get_data()
+    filters = data.get("filters", {})
+    filters[str(data["pending_filter_jq_id"])] = min_val
+    await state.update_data(filters=filters, page=0)
+    await state.set_state(None)
+
+    updated = await state.get_data()
+    await message.answer(
+        "Filter applied. Active filters:",
+        reply_markup=application_filter_kb(updated["numeric_questions"], updated["filters"]),
+    )
+
+
+@router.callback_query(F.data == "admin_filter_clear")
+async def callback_filter_clear(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.update_data(filters={}, page=0)
+    data = await state.get_data()
+    await callback.message.edit_text(
+        "Filters cleared:",
+        reply_markup=application_filter_kb(data["numeric_questions"], {}),
+    )
+    await callback.answer()
+
+
+# --- Shared render ---
+
+async def _render_applications_page(target: Message, data: dict) -> None:
+    niche_id = data["niche_id"]
+    job_id = data.get("job_id")
+    page = data.get("page", 0)
+    filters = {int(k): v for k, v in data.get("filters", {}).items()}
+
+    if job_id is not None:
+        applications = await application_service.list_applications_by_job(job_id)
+        applications = application_service.apply_numeric_filters(applications, filters)
+    else:
+        applications = await application_service.list_applications_by_niche(niche_id)
+
+    if not applications:
+        await target.edit_text("No applications match the selected filters.")
+        return
+
+    total_pages = max(1, -(-len(applications) // APPS_PAGE_SIZE))
+    page = min(page, total_pages - 1)
+    page_apps = applications[page * APPS_PAGE_SIZE:(page + 1) * APPS_PAGE_SIZE]
+
+    await target.edit_text(
+        f"Applications (page {page + 1}/{total_pages}):",
+        reply_markup=applications_page_kb(
+            page_apps, page, total_pages, has_filters=bool(filters)
+        ),
+    )
 
 
 @router.callback_query(F.data.startswith("admin_app:"))

@@ -35,3 +35,7 @@ class ReferralEarningRepository(BaseRepository[ReferralEarning]):
             referral__account_id=account_id
         ).values("amount")
         return sum((r["amount"] for r in result), Decimal("0.00"))
+
+    async def get_earned_by_referral(self, referral_id: int) -> Decimal:
+        result = await ReferralEarning.filter(referral_id=referral_id).values("amount")
+        return sum((r["amount"] for r in result), Decimal("0.00"))

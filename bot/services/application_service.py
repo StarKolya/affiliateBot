@@ -100,5 +100,36 @@ async def list_applications_by_niche(niche_id: int) -> List[JobApplication]:
     return await app_repo.get_by_niche(niche_id)
 
 
+async def list_applications_by_job(job_id: int) -> List[JobApplication]:
+    return await app_repo.get_by_job(job_id)
+
+
+def apply_numeric_filters(
+    applications: List[JobApplication],
+    filters: Dict[int, float],
+) -> List[JobApplication]:
+    """Filter applications in-memory by minimum value per job_question_id."""
+    if not filters:
+        return applications
+    result = []
+    for app in applications:
+        match = True
+        for jq_id, min_val in filters.items():
+            answer = next((a for a in app.answers if a.job_question_id == jq_id), None)
+            if answer is None:
+                match = False
+                break
+            try:
+                if float(answer.answer) < min_val:
+                    match = False
+                    break
+            except ValueError:
+                match = False
+                break
+        if match:
+            result.append(app)
+    return result
+
+
 async def list_user_applications(account_id: int) -> List[JobApplication]:
     return await app_repo.get_by_account(account_id)

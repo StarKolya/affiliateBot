@@ -31,6 +31,11 @@ class JobApplicationRepository(BaseRepository[JobApplication]):
             job_posting__niche_id=niche_id
         ).prefetch_related("status", "job_posting", "account")
 
+    async def get_by_job(self, job_id: int) -> List[JobApplication]:
+        return await JobApplication.filter(
+            job_posting_id=job_id
+        ).prefetch_related("status", "job_posting", "account", "answers")
+
     async def update_status(self, application: JobApplication, status: ApplicationStatus) -> JobApplication:
         application.status = status
         await application.save(update_fields=["status_id", "updated_at"])

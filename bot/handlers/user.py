@@ -4,9 +4,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from bot.config import settings
-from bot.handlers.states import ApplyStates
-from bot.keyboards.user_kb import job_detail_kb, job_list_kb, main_menu_kb, niche_list_kb, subscription_check_kb
-from bot.services import application_service, job_service, user_service
+from bot.handlers.states import ApplyStates, CreateReferralStates
+from bot.keyboards.user_kb import job_detail_kb, job_list_kb, main_menu_kb, niche_list_kb, referral_links_kb, subscription_check_kb
+from bot.services import application_service, job_service, referral_service, user_service
 from bot.utils.logger import get_logger
 from bot.utils.telegram import is_channel_member
 
@@ -198,7 +198,10 @@ async def callback_apply(callback: CallbackQuery, state: FSMContext) -> None:
         job_id=job_id,
         account_id=account.id,
         referred_by_code=account.referred_by_code,
-        questions=[{"id": jq.id, "text": jq.question.description} for jq in questions],
+        questions=[
+            {"id": jq.id, "text": jq.question.description, "type": jq.question.expected_answer_type}
+            for jq in questions
+        ],
         index=0,
         answers={},
     )
@@ -216,7 +219,15 @@ async def fsm_collect_answer(message: Message, state: FSMContext) -> None:
     index = data["index"]
     answers = data["answers"]
 
-    answers[str(questions[index]["id"])] = message.text
+    current_q = questions[index]
+    if current_q["type"] == "number":
+        try:
+            float(message.text.replace(",", "."))
+        except ValueError:
+            await message.answer("Please enter a valid number:")
+            return
+
+    answers[str(current_q["id"])] = message.text
     index += 1
 
     if index < len(questions):
@@ -243,3 +254,63 @@ async def fsm_collect_answer(message: Message, state: FSMContext) -> None:
     await message.answer("✅ Your application has been submitted!")
 
 
+# --- Referral links ---
+
+@router.message(F.text == "🔗 Referral Links")
+async def cmd_referral_links(message: Message) -> None:
+    account = await user_service.get_by_telegram_id(message.from_user.id)
+    if account is None:
+        return
+    await _show_referral_links(message, account)
+
+
+async def _show_referral_links(target: Message, account) -> None:
+    referrals = await referral_service.list_user_referrals(account.id)
+
+    if not referrals:
+        text = "You have no referral links yet.\n\nCreate one to start earning!"
+    else:
+        lines = ["🔗 <b>Your Referral Links</b>\n"]
+        for i, referral in enumerate(referrals, 1):
+            stats = await referral_service.get_referral_stats(referral)
+            link = f"https://t.me/{settings.BOT_USERNAME}?start=ref={referral.code}"
+            lines += [
+                f"<b>{i}. {referral.name}</b>",
+                f"👥 Referred: {stats.referred_users}",
+                f"📝 Applications: {stats.applications}",
+                f"💰 Earned: ${stats.earned:.2f}",
+                f"🔗 <code>{link}</code>",
+                "",
+            ]
+        text = "\n".join(lines).strip()
+
+    await target.answer(text, reply_markup=referral_links_kb())
+
+
+@router.callback_query(F.data == "referral_create")
+async def callback_referral_create(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(CreateReferralStates.enter_name)
+    await callback.message.edit_text(
+        "Enter a name for this referral link (e.g. <i>Instagram</i>, <i>Friends</i>):"
+    )
+    await callback.answer()
+
+
+@router.message(CreateReferralStates.enter_name)
+async def fsm_referral_enter_name(message: Message, state: FSMContext) -> None:
+    name = message.text.strip()
+    if len(name) > 50:
+        await message.answer("Name is too long. Please keep it under 50 characters:")
+        return
+
+    account = await user_service.get_by_telegram_id(message.from_user.id)
+    await state.clear()
+
+    referral = await referral_service.create_referral_link(account_id=account.id, name=name)
+    link = f"https://t.me/{settings.BOT_USERNAME}?start=ref={referral.code}"
+    await message.answer(
+        f"✅ Link <b>{referral.name}</b> created!\n\n"
+        f"🔗 <code>{link}</code>\n\n"
+        "Share this link — you'll earn commission when your referrals get hired.",
+        reply_markup=referral_links_kb(),
+    )
