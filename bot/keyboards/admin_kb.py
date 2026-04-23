@@ -14,6 +14,7 @@ def admin_menu_kb() -> ReplyKeyboardMarkup:
     builder.button(text="📋 Applications")
     builder.button(text="💰 Payouts")
     builder.button(text="💼 Jobs")
+    builder.button(text="🏷 Niches")
     builder.adjust(2)
     return builder.as_markup(resize_keyboard=True)
 
@@ -21,6 +22,65 @@ def admin_menu_kb() -> ReplyKeyboardMarkup:
 def jobs_menu_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="➕ Create Job", callback_data="admin_create_job")
+    builder.button(text="📋 Manage Jobs", callback_data="admin_manage_jobs")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def niches_manage_kb(niches) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for niche in niches:
+        builder.button(text=niche.name, callback_data=f"admin_niche_detail:{niche.id}")
+    builder.button(text="➕ Create Niche", callback_data="admin_create_niche")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def niche_detail_kb(niche_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🗑 Delete Niche", callback_data=f"admin_niche_delete:{niche_id}")
+    builder.button(text="⬅️ Back", callback_data="admin_niches_menu")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def niche_delete_confirm_kb(niche_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Yes, delete", callback_data=f"admin_niche_delete_confirm:{niche_id}")
+    builder.button(text="❌ Cancel", callback_data=f"admin_niche_detail:{niche_id}")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def jobs_manage_niche_kb(niches) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for niche in niches:
+        builder.button(text=niche.name, callback_data=f"admin_manage_jobs_niche:{niche.id}")
+    builder.button(text="⬅️ Back", callback_data="admin_jobs_menu")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+_STATUS_ICON = {"active": "🟢", "paused": "🟡", "closed": "🔴"}
+
+
+def jobs_manage_list_kb(jobs, niche_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for job in jobs:
+        icon = _STATUS_ICON.get(job.status, "⚪")
+        builder.button(text=f"{icon} {job.title}", callback_data=f"admin_manage_job:{job.id}:{niche_id}")
+    builder.button(text="⬅️ Back", callback_data="admin_manage_jobs")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def job_manage_detail_kb(job_id: int, status: str, niche_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    if status == "active":
+        builder.button(text="⏸ Pause", callback_data=f"admin_job_toggle:{job_id}:{niche_id}")
+    else:
+        builder.button(text="▶️ Enable", callback_data=f"admin_job_toggle:{job_id}:{niche_id}")
+    builder.button(text="⬅️ Back", callback_data=f"admin_manage_jobs_niche:{niche_id}")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -59,7 +119,7 @@ def question_select_kb(
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for q in questions:
-        label = q.description if len(q.description) <= 40 else q.description[:37] + "..."
+        label = q.title
         if q.id in selected_ids:
             label = f"{label} +"
         builder.button(text=label, callback_data=f"admin_q_toggle:{q.id}")

@@ -37,6 +37,35 @@ async def list_all_niches() -> List[Niche]:
     return await niche_repo.get_all()
 
 
+async def get_niche(niche_id: int) -> Optional[Niche]:
+    return await niche_repo.get_by_id(niche_id)
+
+
+async def create_niche(name: str) -> Niche:
+    return await niche_repo.create(name=name)
+
+
+async def count_jobs_by_niche(niche_id: int) -> int:
+    return await job_repo.count_by_niche(niche_id)
+
+
+async def list_all_jobs_by_niche(niche_id: int) -> List[JobPosting]:
+    return await job_repo.get_all_by_niche(niche_id)
+
+
+async def delete_niche(niche_id: int) -> None:
+    jobs = await job_repo.get_all_by_niche(niche_id)
+    for job in jobs:
+        await job_repo.update(job, status="closed")
+    niche = await niche_repo.get_by_id(niche_id)
+    await niche_repo.delete(niche)
+
+
+async def set_job_status(job_id: int, status: str) -> JobPosting:
+    job = await job_repo.get_by_id(job_id)
+    return await job_repo.update(job, status=status)
+
+
 async def list_all_questions() -> List[Question]:
     return await question_repo.get_all()
 

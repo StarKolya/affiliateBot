@@ -19,5 +19,13 @@ class FilterApplicationsStates(StatesGroup):
     entering_filter = State()
 
 
+class CreateNicheStates(StatesGroup):
+    enter_name = State()
+
+
 class CreateReferralStates(StatesGroup):
     enter_name = State()
+
+
+class RequestPayoutStates(StatesGroup):
+    enter_amount = State()

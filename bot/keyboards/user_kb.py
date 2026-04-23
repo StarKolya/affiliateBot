@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Optional
 
 from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardMarkup
@@ -66,7 +67,7 @@ def referral_menu_kb() -> InlineKeyboardMarkup:
 
 def referral_stats_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="💰 Request Payout", callback_data="payout_request")
+    builder.button(text="💰 Request Payout", callback_data="payout_menu")
     builder.button(text="⬅️ Back", callback_data="referral_menu")
     builder.adjust(1)
     return builder.as_markup()
@@ -96,5 +97,46 @@ def referral_links_list_kb(links, page: int, total_pages: int) -> InlineKeyboard
 def referral_detail_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="⬅️ Back to links", callback_data="referral_links")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def payout_menu_kb(has_available: bool) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    if has_available:
+        builder.button(text="➕ Create Request", callback_data="payout_create")
+    builder.button(text="📋 History", callback_data="payout_history")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+PAYOUT_HISTORY_PAGE_SIZE = 5
+
+
+def payout_history_kb(payouts, page: int, total_pages: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    nav = []
+    if page > 0:
+        nav.append(("◀️", f"payout_history_page:{page - 1}"))
+    if page < total_pages - 1:
+        nav.append(("▶️", f"payout_history_page:{page + 1}"))
+    for text, cb in nav:
+        builder.button(text=text, callback_data=cb)
+    builder.button(text="⬅️ Back", callback_data="payout_menu")
+    row_sizes = []
+    if nav:
+        row_sizes.append(len(nav))
+    row_sizes.append(1)
+    builder.adjust(*row_sizes)
+    return builder.as_markup()
+
+
+def payout_create_kb(available_amount) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text=f"💰 All available (${available_amount:.2f})",
+        callback_data="payout_all_available",
+    )
+    builder.button(text="❌ Cancel", callback_data="payout_menu")
     builder.adjust(1)
     return builder.as_markup()

@@ -68,15 +68,15 @@ async def seed_test_data() -> None:
     # Question bank
     q1, _ = await Question.get_or_create(
         description="Tell us about your relevant experience.",
-        defaults={"expected_answer_type": "text"},
+        defaults={"title": "Experience", "expected_answer_type": "text"},
     )
     q2, _ = await Question.get_or_create(
         description="Are you available to start immediately?",
-        defaults={"expected_answer_type": "yes_no"},
+        defaults={"title": "Availability", "expected_answer_type": "yes_no"},
     )
     q3, _ = await Question.get_or_create(
         description="What is your expected salary?",
-        defaults={"expected_answer_type": "number"},
+        defaults={"title": "Expected Salary", "expected_answer_type": "number"},
     )
 
     # Job postings

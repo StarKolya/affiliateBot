@@ -18,7 +18,7 @@ class Niche(Model):
 class JobPosting(Model):
     id = fields.IntField(pk=True)
     niche: fields.ForeignKeyRelation[Niche] = fields.ForeignKeyField(
-        "models.Niche", related_name="job_postings", on_delete=fields.CASCADE
+        "models.Niche", related_name="job_postings", on_delete=fields.SET_NULL, null=True
     )
     title = fields.CharField(max_length=200)
     description = fields.TextField(null=True)
@@ -43,6 +43,7 @@ class Question(Model):
     """Predefined question bank. Questions are never job-specific until assigned."""
 
     id = fields.IntField(pk=True)
+    title = fields.CharField(max_length=100)
     description = fields.CharField(max_length=500)
     # Expected answer type hint: "text" | "yes_no" | "number"
     expected_answer_type = fields.CharField(max_length=10, default="text")
@@ -51,7 +52,7 @@ class Question(Model):
         table = "questions"
 
     def __str__(self) -> str:
-        return self.description[:60]
+        return self.title
 
 
 class JobQuestion(Model):

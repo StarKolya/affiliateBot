@@ -1,23 +1,29 @@
+from decimal import Decimal, InvalidOperation
+
 from aiogram import Bot, F, Router
 from aiogram.filters import CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from bot.config import settings
-from bot.handlers.states import ApplyStates, CreateReferralStates
+from bot.handlers.states import ApplyStates, CreateReferralStates, RequestPayoutStates
 from bot.keyboards.user_kb import (
+    PAYOUT_HISTORY_PAGE_SIZE,
     REFERRAL_PAGE_SIZE,
     job_detail_kb,
     job_list_kb,
     main_menu_kb,
     niche_list_kb,
+    payout_create_kb,
+    payout_history_kb,
+    payout_menu_kb,
     referral_detail_kb,
     referral_links_list_kb,
     referral_menu_kb,
     referral_stats_kb,
     subscription_check_kb,
 )
-from bot.services import application_service, job_service, referral_service, user_service
+from bot.services import application_service, job_service, payout_service, referral_service, user_service
 from bot.utils.logger import get_logger
 from bot.utils.telegram import is_channel_member
 
@@ -295,7 +301,10 @@ async def callback_referral_stats(callback: CallbackQuery) -> None:
     await callback.message.edit_text(
         f"📊 <b>Your Stats</b>\n\n"
         f"👥 Total referred: {stats.total_referred}\n"
-        f"📝 Applications submitted: {stats.total_applications}\n"
+        f"📝 Applications: {stats.total_applications}\n"
+        f"  ⏳ Pending: {stats.total_pending}\n"
+        f"  ❌ Declined: {stats.total_declined}\n"
+        f"  ✅ Accepted: {stats.total_accepted}\n"
         f"💰 Total earned: ${stats.total_earned:.2f}",
         reply_markup=referral_stats_kb(),
     )
@@ -345,6 +354,9 @@ async def callback_referral_detail(callback: CallbackQuery) -> None:
         f"🔗 <b>{referral.name}</b>\n\n"
         f"👥 Referred: {stats.referred_users}\n"
         f"📝 Applications: {stats.applications}\n"
+        f"  ⏳ Pending: {stats.pending}\n"
+        f"  ❌ Declined: {stats.declined}\n"
+        f"  ✅ Accepted: {stats.accepted}\n"
         f"💰 Earned: ${stats.earned:.2f}\n\n"
         f"<code>{link}</code>",
         reply_markup=referral_detail_kb(),
@@ -378,4 +390,127 @@ async def fsm_referral_enter_name(message: Message, state: FSMContext) -> None:
         f"<code>{link}</code>\n\n"
         "Share this link — you'll earn commission when your referrals get hired.",
         reply_markup=referral_menu_kb(),
+    )
+
+
+# --- Payouts ---
+
+async def _show_payout_menu(target: Message, telegram_id: int, edit: bool = True) -> None:
+    account = await user_service.get_by_telegram_id(telegram_id)
+    summary = await payout_service.get_user_summary(account.id)
+    text = (
+        f"💰 <b>Payouts</b>\n\n"
+        f"⏳ Pending: ${summary.pending_amount:.2f}\n"
+        f"✅ Paid out: ${summary.paid_out_amount:.2f}\n"
+        f"💵 Available: ${summary.available_amount:.2f}"
+    )
+    kb = payout_menu_kb(has_available=summary.available_amount > 0)
+    if edit:
+        await target.edit_text(text, reply_markup=kb)
+    else:
+        await target.answer(text, reply_markup=kb)
+
+
+@router.message(F.text == "💰 Request Payout")
+async def cmd_payout_menu(message: Message) -> None:
+    await _show_payout_menu(message, message.from_user.id, edit=False)
+
+
+@router.callback_query(F.data == "payout_menu")
+async def callback_payout_menu(callback: CallbackQuery) -> None:
+    await _show_payout_menu(callback.message, callback.from_user.id)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "payout_history")
+async def callback_payout_history(callback: CallbackQuery) -> None:
+    await _show_payout_history_page(callback.message, callback.from_user.id, page=0)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("payout_history_page:"))
+async def callback_payout_history_page(callback: CallbackQuery) -> None:
+    page = int(callback.data.split(":")[1])
+    await _show_payout_history_page(callback.message, callback.from_user.id, page=page)
+    await callback.answer()
+
+
+async def _show_payout_history_page(target: Message, telegram_id: int, page: int) -> None:
+    account = await user_service.get_by_telegram_id(telegram_id)
+    payouts = await payout_service.list_user_payouts(account.id)
+    total_pages = max(1, -(-len(payouts) // PAYOUT_HISTORY_PAGE_SIZE))
+    page = min(page, total_pages - 1)
+    page_payouts = payouts[page * PAYOUT_HISTORY_PAGE_SIZE:(page + 1) * PAYOUT_HISTORY_PAGE_SIZE]
+
+    STATUS_ICON = {"pending": "⏳", "approved": "✅", "rejected": "❌"}
+    if page_payouts:
+        lines = [f"📋 <b>Payout History</b>  (page {page + 1}/{total_pages})\n"]
+        for p in page_payouts:
+            icon = STATUS_ICON.get(p.status, "•")
+            date = p.created_at.strftime("%d %b %Y")
+            lines.append(f"{icon} ${p.amount:.2f} — {p.status} — {date}")
+        text = "\n".join(lines)
+    else:
+        text = "📋 <b>Payout History</b>\n\nNo payout requests yet."
+
+    await target.edit_text(text, reply_markup=payout_history_kb(page_payouts, page, total_pages))
+
+
+@router.callback_query(F.data == "payout_create")
+async def callback_payout_create(callback: CallbackQuery, state: FSMContext) -> None:
+    account = await user_service.get_by_telegram_id(callback.from_user.id)
+    summary = await payout_service.get_user_summary(account.id)
+    await state.set_state(RequestPayoutStates.enter_amount)
+    await state.update_data(account_id=account.id, available=str(summary.available_amount))
+    await callback.message.edit_text(
+        f"Enter the amount to request, or tap the button below to request everything available:",
+        reply_markup=payout_create_kb(summary.available_amount),
+    )
+    await callback.answer()
+
+
+@router.callback_query(RequestPayoutStates.enter_amount, F.data == "payout_all_available")
+async def callback_payout_all_available(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    await state.clear()
+    amount = Decimal(data["available"])
+    account_id = data["account_id"]
+    try:
+        await payout_service.request_payout(account_id=account_id, amount=amount)
+    except ValueError as e:
+        await callback.answer(str(e), show_alert=True)
+        return
+    await callback.message.edit_text(
+        f"✅ Payout request for <b>${amount:.2f}</b> submitted!",
+        reply_markup=payout_menu_kb(has_available=False),
+    )
+    await callback.answer()
+
+
+@router.message(RequestPayoutStates.enter_amount)
+async def fsm_payout_enter_amount(message: Message, state: FSMContext) -> None:
+    try:
+        amount = Decimal(message.text.strip().replace(",", "."))
+    except InvalidOperation:
+        await message.answer("Please enter a valid number:")
+        return
+    if amount <= 0:
+        await message.answer("Amount must be greater than zero:")
+        return
+
+    data = await state.get_data()
+    available = Decimal(data["available"])
+    if amount > available:
+        await message.answer(f"Amount exceeds your available balance (${available:.2f}). Enter a lower amount:")
+        return
+
+    await state.clear()
+    try:
+        await payout_service.request_payout(account_id=data["account_id"], amount=amount)
+    except ValueError as e:
+        await message.answer(str(e))
+        return
+    await message.answer(
+        f"✅ Payout request for <b>${amount:.2f}</b> submitted!",
+        reply_markup=payout_menu_kb(has_available=False),
     )

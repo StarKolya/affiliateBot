@@ -5,7 +5,7 @@ from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.filters import IsAdmin
-from bot.handlers.states import CreateJobStates, FilterApplicationsStates
+from bot.handlers.states import CreateJobStates, CreateNicheStates, FilterApplicationsStates
 from bot.keyboards.admin_kb import (
     APPS_PAGE_SIZE,
     QUESTIONS_PAGE_SIZE,
@@ -14,8 +14,14 @@ from bot.keyboards.admin_kb import (
     application_filter_kb,
     application_status_kb,
     applications_page_kb,
+    job_manage_detail_kb,
     job_type_kb,
+    jobs_manage_list_kb,
+    jobs_manage_niche_kb,
     jobs_menu_kb,
+    niche_delete_confirm_kb,
+    niche_detail_kb,
+    niches_manage_kb,
     question_select_kb,
     skip_kb,
 )
@@ -470,6 +476,139 @@ async def callback_update_status(callback: CallbackQuery) -> None:
 @router.callback_query(F.data == "app_status_noop")
 async def callback_status_noop(callback: CallbackQuery) -> None:
     await callback.answer("Already set to this status.")
+
+
+# --- Jobs menu callback (for back buttons) ---
+
+@router.callback_query(F.data == "admin_jobs_menu")
+async def callback_jobs_menu(callback: CallbackQuery) -> None:
+    await callback.message.edit_text("Job management:", reply_markup=jobs_menu_kb())
+    await callback.answer()
+
+
+# --- Job enable / disable ---
+
+@router.callback_query(F.data == "admin_manage_jobs")
+async def callback_manage_jobs(callback: CallbackQuery) -> None:
+    niches = await job_service.list_all_niches()
+    if not niches:
+        await callback.answer("No niches exist yet.", show_alert=True)
+        return
+    await callback.message.edit_text("Select a niche:", reply_markup=jobs_manage_niche_kb(niches))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_manage_jobs_niche:"))
+async def callback_manage_jobs_niche(callback: CallbackQuery) -> None:
+    niche_id = int(callback.data.split(":")[1])
+    jobs = await job_service.list_all_jobs_by_niche(niche_id)
+    if not jobs:
+        await callback.answer("No jobs in this niche.", show_alert=True)
+        return
+    await callback.message.edit_text(
+        "Select a job to manage:",
+        reply_markup=jobs_manage_list_kb(jobs, niche_id),
+    )
+    await callback.answer()
+
+
+_STATUS_LABEL = {"active": "🟢 Active", "paused": "🟡 Paused", "closed": "🔴 Closed"}
+
+
+@router.callback_query(F.data.startswith("admin_manage_job:"))
+async def callback_manage_job_detail(callback: CallbackQuery) -> None:
+    parts = callback.data.split(":")
+    job_id, niche_id = int(parts[1]), int(parts[2])
+    job = await job_service.get_job(job_id)
+    status_label = _STATUS_LABEL.get(job.status, job.status)
+    await callback.message.edit_text(
+        f"💼 <b>{job.title}</b>\nType: {job.type}\nStatus: {status_label}",
+        reply_markup=job_manage_detail_kb(job_id, job.status, niche_id),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_job_toggle:"))
+async def callback_job_toggle_status(callback: CallbackQuery) -> None:
+    parts = callback.data.split(":")
+    job_id, niche_id = int(parts[1]), int(parts[2])
+    job = await job_service.get_job(job_id)
+    new_status = "paused" if job.status == "active" else "active"
+    job = await job_service.set_job_status(job_id, new_status)
+    status_label = _STATUS_LABEL.get(job.status, job.status)
+    await callback.message.edit_text(
+        f"💼 <b>{job.title}</b>\nType: {job.type}\nStatus: {status_label}",
+        reply_markup=job_manage_detail_kb(job_id, job.status, niche_id),
+    )
+    await callback.answer()
+
+
+# --- Niche management ---
+
+@router.message(F.text == "🏷 Niches")
+async def cmd_niches_menu(message: Message) -> None:
+    niches = await job_service.list_all_niches()
+    await message.answer("Niche management:", reply_markup=niches_manage_kb(niches))
+
+
+@router.callback_query(F.data == "admin_niches_menu")
+async def callback_niches_menu(callback: CallbackQuery) -> None:
+    niches = await job_service.list_all_niches()
+    await callback.message.edit_text("Niche management:", reply_markup=niches_manage_kb(niches))
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_create_niche")
+async def callback_create_niche(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(CreateNicheStates.enter_name)
+    await callback.message.edit_text("Enter the niche name:")
+    await callback.answer()
+
+
+@router.message(CreateNicheStates.enter_name)
+async def fsm_enter_niche_name(message: Message, state: FSMContext) -> None:
+    name = message.text.strip()
+    await job_service.create_niche(name)
+    await state.clear()
+    niches = await job_service.list_all_niches()
+    await message.answer(f"✅ Niche <b>{name}</b> created.", reply_markup=niches_manage_kb(niches))
+
+
+@router.callback_query(F.data.startswith("admin_niche_detail:"))
+async def callback_niche_detail(callback: CallbackQuery) -> None:
+    niche_id = int(callback.data.split(":")[1])
+    niche = await job_service.get_niche(niche_id)
+    job_count = await job_service.count_jobs_by_niche(niche_id)
+    await callback.message.edit_text(
+        f"🏷 <b>{niche.name}</b>\nJobs: {job_count}",
+        reply_markup=niche_detail_kb(niche_id),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_niche_delete:"))
+async def callback_niche_delete(callback: CallbackQuery) -> None:
+    niche_id = int(callback.data.split(":")[1])
+    job_count = await job_service.count_jobs_by_niche(niche_id)
+    if job_count > 0:
+        text = (
+            f"⚠️ This niche contains <b>{job_count}</b> job(s).\n"
+            "Deleting it will disable all associated jobs.\n\n"
+            "Are you sure?"
+        )
+    else:
+        text = "Are you sure you want to delete this niche?"
+    await callback.message.edit_text(text, reply_markup=niche_delete_confirm_kb(niche_id))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_niche_delete_confirm:"))
+async def callback_niche_delete_confirm(callback: CallbackQuery) -> None:
+    niche_id = int(callback.data.split(":")[1])
+    await job_service.delete_niche(niche_id)
+    niches = await job_service.list_all_niches()
+    await callback.message.edit_text("✅ Niche deleted.", reply_markup=niches_manage_kb(niches))
+    await callback.answer()
 
 
 # --- Payout management ---

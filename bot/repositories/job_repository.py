@@ -17,6 +17,12 @@ class JobPostingRepository(BaseRepository[JobPosting]):
     async def get_by_niche(self, niche_id: int) -> List[JobPosting]:
         return await JobPosting.filter(niche_id=niche_id, status="active")
 
+    async def get_all_by_niche(self, niche_id: int) -> List[JobPosting]:
+        return await JobPosting.filter(niche_id=niche_id)
+
+    async def count_by_niche(self, niche_id: int) -> int:
+        return await JobPosting.filter(niche_id=niche_id).count()
+
     async def get_with_questions(self, job_id: int) -> Optional[JobPosting]:
         return await JobPosting.get_or_none(id=job_id).prefetch_related(
             "job_questions__question"

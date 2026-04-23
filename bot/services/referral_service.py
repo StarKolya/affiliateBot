@@ -26,12 +26,19 @@ EARNING_TRIGGERS: dict[str, dict[str, str]] = {
     },
 }
 
+STATUSES_PENDING = ("Pending",)
+STATUSES_DECLINED = ("Declined",)
+STATUSES_ACCEPTED = ("Deal Closed", "Joined Team", "Bought Course")
+
 
 @dataclass
 class ReferralStats:
     referral: Referral
     referred_users: int
     applications: int
+    pending: int
+    declined: int
+    accepted: int
     earned: Decimal
 
 
@@ -39,6 +46,9 @@ class ReferralStats:
 class AccountReferralStats:
     total_referred: int
     total_applications: int
+    total_pending: int
+    total_declined: int
+    total_accepted: int
     total_earned: Decimal
 
 
@@ -63,23 +73,37 @@ async def get_account_stats(account_id: int) -> AccountReferralStats:
     referrals = await referral_repo.get_by_account(account_id)
     codes = [r.code for r in referrals]
     total_referred = await Account.filter(referred_by_code__in=codes).count() if codes else 0
-    total_applications = await JobApplication.filter(referral__account_id=account_id).count()
+    base = JobApplication.filter(referral__account_id=account_id)
+    total_applications = await base.count()
+    total_pending = await base.filter(status__name__in=STATUSES_PENDING).count()
+    total_declined = await base.filter(status__name__in=STATUSES_DECLINED).count()
+    total_accepted = await base.filter(status__name__in=STATUSES_ACCEPTED).count()
     total_earned = await earning_repo.get_total_earned(account_id)
     return AccountReferralStats(
         total_referred=total_referred,
         total_applications=total_applications,
+        total_pending=total_pending,
+        total_declined=total_declined,
+        total_accepted=total_accepted,
         total_earned=total_earned,
     )
 
 
 async def get_referral_stats(referral: Referral) -> ReferralStats:
     referred_users = await Account.filter(referred_by_code=referral.code).count()
-    applications = await JobApplication.filter(referral_id=referral.id).count()
+    base = JobApplication.filter(referral_id=referral.id)
+    applications = await base.count()
+    pending = await base.filter(status__name__in=STATUSES_PENDING).count()
+    declined = await base.filter(status__name__in=STATUSES_DECLINED).count()
+    accepted = await base.filter(status__name__in=STATUSES_ACCEPTED).count()
     earned = await earning_repo.get_earned_by_referral(referral.id)
     return ReferralStats(
         referral=referral,
         referred_users=referred_users,
         applications=applications,
+        pending=pending,
+        declined=declined,
+        accepted=accepted,
         earned=earned,
     )
 
