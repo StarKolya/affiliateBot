@@ -12,9 +12,9 @@ STATUSES_BY_TYPE: dict[str, tuple] = {
 def admin_menu_kb() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     builder.button(text="📋 Applications")
-    builder.button(text="💰 Payouts")
     builder.button(text="💼 Jobs")
     builder.button(text="🏷 Niches")
+    builder.button(text="🔗 Referrals")
     builder.adjust(2)
     return builder.as_markup(resize_keyboard=True)
 
@@ -191,6 +191,73 @@ def application_status_kb(application_id: int, current_status: str, job_type: st
     return builder.as_markup()
 
 
+REFERRERS_PAGE_SIZE = 8
+FINANCE_PAGE_SIZE = 8
+
+
+def referrals_menu_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="👥 All Referrers", callback_data="admin_all_referrers")
+    builder.button(text="💰 Finance", callback_data="admin_finance")
+    builder.adjust(2)
+    return builder.as_markup()
+
+
+def referrers_list_kb(accounts, page: int, total_pages: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for acc in accounts:
+        label = acc.name
+        if acc.username:
+            label += f" (@{acc.username})"
+        builder.button(text=label, callback_data=f"admin_referrer:{acc.id}")
+    nav = []
+    if page > 0:
+        nav.append(("◀️", f"admin_referrers_page:{page - 1}"))
+    if page < total_pages - 1:
+        nav.append(("▶️", f"admin_referrers_page:{page + 1}"))
+    for text, cb in nav:
+        builder.button(text=text, callback_data=cb)
+    builder.button(text="⬅️ Back", callback_data="admin_referrals_menu")
+    rows = [1] * len(accounts)
+    if nav:
+        rows.append(len(nav))
+    rows.append(1)
+    builder.adjust(*rows)
+    return builder.as_markup()
+
+
+def referrer_detail_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⬅️ Back", callback_data="admin_all_referrers")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def finance_list_kb(payouts, page: int, total_pages: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for p in payouts:
+        tag = f"@{p.account.username}" if p.account.username else p.account.name
+        builder.button(text=f"{tag} | ${p.amount:.2f}", callback_data=f"admin_payout:{p.id}")
+    nav = []
+    if page > 0:
+        nav.append(("◀️", f"admin_finance_page:{page - 1}"))
+    if page < total_pages - 1:
+        nav.append(("▶️", f"admin_finance_page:{page + 1}"))
+    for text, cb in nav:
+        builder.button(text=text, callback_data=cb)
+    builder.button(text="⬅️ Back", callback_data="admin_referrals_menu")
+    rows = [1] * len(payouts)
+    if nav:
+        rows.append(len(nav))
+    rows.append(1)
+    builder.adjust(*rows)
+    return builder.as_markup()
+
+
 def payout_action_kb(payout_id: int) -> InlineKeyboardMarkup:
-    """Approve / Reject buttons for a payout request."""
-    ...
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Paid", callback_data=f"admin_payout_approve:{payout_id}")
+    builder.button(text="❌ Rejected", callback_data=f"admin_payout_reject:{payout_id}")
+    builder.button(text="⬅️ Back", callback_data="admin_finance")
+    builder.adjust(2, 1)
+    return builder.as_markup()

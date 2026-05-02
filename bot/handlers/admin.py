@@ -8,12 +8,15 @@ from bot.filters import IsAdmin
 from bot.handlers.states import CreateJobStates, CreateNicheStates, FilterApplicationsStates
 from bot.keyboards.admin_kb import (
     APPS_PAGE_SIZE,
+    FINANCE_PAGE_SIZE,
     QUESTIONS_PAGE_SIZE,
+    REFERRERS_PAGE_SIZE,
     admin_menu_kb,
     admin_niche_select_kb,
     application_filter_kb,
     application_status_kb,
     applications_page_kb,
+    finance_list_kb,
     job_manage_detail_kb,
     job_type_kb,
     jobs_manage_list_kb,
@@ -22,10 +25,16 @@ from bot.keyboards.admin_kb import (
     niche_delete_confirm_kb,
     niche_detail_kb,
     niches_manage_kb,
+    payout_action_kb,
     question_select_kb,
+    referrals_menu_kb,
+    referrer_detail_kb,
+    referrers_list_kb,
     skip_kb,
 )
-from bot.services import application_service, job_service
+from bot.services import application_service, job_service, payout_service, referral_service
+from bot.models.account import Account
+from bot.models.referral import Referral
 from bot.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -611,15 +620,136 @@ async def callback_niche_delete_confirm(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
-# --- Payout management ---
+# --- Referrals ---
 
-async def handle_list_payouts(message: Message) -> None:
-    ...
+@router.message(F.text == "🔗 Referrals")
+async def cmd_referrals_menu(message: Message) -> None:
+    overview = await referral_service.get_admin_overview()
+    await message.answer(
+        f"🔗 <b>Referral Overview</b>\n\n"
+        f"👤 Referrers: {overview['total_referrers']}\n"
+        f"👥 Referred users: {overview['total_referred']}\n"
+        f"📝 Applications via referral: {overview['total_applications']}\n"
+        f"💰 Total earned: ${overview['total_earned']:.2f}\n"
+        f"⏳ Pending payouts: {overview['pending_payout_count']} (${overview['pending_payout_amount']:.2f})",
+        reply_markup=referrals_menu_kb(),
+    )
 
 
-async def handle_approve_payout(message: Message) -> None:
-    ...
+@router.callback_query(F.data == "admin_referrals_menu")
+async def callback_referrals_menu(callback: CallbackQuery) -> None:
+    overview = await referral_service.get_admin_overview()
+    await callback.message.edit_text(
+        f"🔗 <b>Referral Overview</b>\n\n"
+        f"👤 Referrers: {overview['total_referrers']}\n"
+        f"👥 Referred users: {overview['total_referred']}\n"
+        f"📝 Applications via referral: {overview['total_applications']}\n"
+        f"💰 Total earned: ${overview['total_earned']:.2f}\n"
+        f"⏳ Pending payouts: {overview['pending_payout_count']} (${overview['pending_payout_amount']:.2f})",
+        reply_markup=referrals_menu_kb(),
+    )
+    await callback.answer()
 
 
-async def handle_reject_payout(message: Message) -> None:
-    ...
+@router.callback_query(F.data == "admin_all_referrers")
+async def callback_all_referrers(callback: CallbackQuery) -> None:
+    await _show_referrers_page(callback.message, page=0)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_referrers_page:"))
+async def callback_referrers_page(callback: CallbackQuery) -> None:
+    page = int(callback.data.split(":")[1])
+    await _show_referrers_page(callback.message, page=page)
+    await callback.answer()
+
+
+async def _show_referrers_page(target: Message, page: int) -> None:
+    accounts = await Account.filter(referrals__isnull=False).distinct().order_by("name")
+    total_pages = max(1, -(-len(accounts) // REFERRERS_PAGE_SIZE))
+    page = min(page, total_pages - 1)
+    page_accounts = accounts[page * REFERRERS_PAGE_SIZE:(page + 1) * REFERRERS_PAGE_SIZE]
+    text = f"👥 <b>All Referrers</b>  (page {page + 1}/{total_pages})" if accounts else "👥 <b>All Referrers</b>\n\nNo referrers yet."
+    await target.edit_text(text, reply_markup=referrers_list_kb(page_accounts, page, total_pages))
+
+
+@router.callback_query(F.data.startswith("admin_referrer:"))
+async def callback_referrer_detail(callback: CallbackQuery) -> None:
+    account_id = int(callback.data.split(":")[1])
+    account = await Account.get_or_none(id=account_id)
+    if account is None:
+        await callback.answer("User not found.", show_alert=True)
+        return
+    stats = await referral_service.get_account_stats(account_id)
+    links = await referral_service.list_user_referrals(account_id)
+    tag = f"@{account.username}" if account.username else account.name
+    await callback.message.edit_text(
+        f"👤 <b>{account.name}</b>  {tag}\n\n"
+        f"🔗 Links: {len(links)}\n"
+        f"👥 Referred users: {stats.total_referred}\n"
+        f"📝 Applications: {stats.total_applications}\n"
+        f"  ⏳ Pending: {stats.total_pending}\n"
+        f"  ❌ Declined: {stats.total_declined}\n"
+        f"  🤝 Deal Closed: {stats.total_deal_closed}\n"
+        f"  ✅ Joined Team: {stats.total_joined_team}\n"
+        f"  📚 Bought Course: {stats.total_bought_course}\n"
+        f"💰 Total earned: ${stats.total_earned:.2f}",
+        reply_markup=referrer_detail_kb(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_finance")
+async def callback_finance(callback: CallbackQuery) -> None:
+    await _show_finance_page(callback.message, page=0)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_finance_page:"))
+async def callback_finance_page(callback: CallbackQuery) -> None:
+    page = int(callback.data.split(":")[1])
+    await _show_finance_page(callback.message, page=page)
+    await callback.answer()
+
+
+async def _show_finance_page(target: Message, page: int) -> None:
+    payouts = await payout_service.list_pending_payouts()
+    total_pages = max(1, -(-len(payouts) // FINANCE_PAGE_SIZE))
+    page = min(page, total_pages - 1)
+    page_payouts = payouts[page * FINANCE_PAGE_SIZE:(page + 1) * FINANCE_PAGE_SIZE]
+    text = f"💰 <b>Pending Payouts</b>  (page {page + 1}/{total_pages})" if payouts else "💰 <b>Pending Payouts</b>\n\nNo pending requests."
+    await target.edit_text(text, reply_markup=finance_list_kb(page_payouts, page, total_pages))
+
+
+@router.callback_query(F.data.startswith("admin_payout:"))
+async def callback_payout_detail(callback: CallbackQuery) -> None:
+    payout_id = int(callback.data.split(":")[1])
+    payouts = await payout_service.list_pending_payouts()
+    payout = next((p for p in payouts if p.id == payout_id), None)
+    if payout is None:
+        await callback.answer("Request not found or already processed.", show_alert=True)
+        return
+    tag = f"@{payout.account.username}" if payout.account.username else payout.account.name
+    await callback.message.edit_text(
+        f"💰 <b>Payout Request</b>\n\n"
+        f"👤 {tag}\n"
+        f"💵 Amount: ${payout.amount:.2f}",
+        reply_markup=payout_action_kb(payout_id),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_payout_approve:"))
+async def callback_payout_approve(callback: CallbackQuery) -> None:
+    payout_id = int(callback.data.split(":")[1])
+    await payout_service.approve_payout(payout_id)
+    await callback.answer("✅ Marked as paid.", show_alert=True)
+    await _show_finance_page(callback.message, page=0)
+
+
+@router.callback_query(F.data.startswith("admin_payout_reject:"))
+async def callback_payout_reject(callback: CallbackQuery) -> None:
+    payout_id = int(callback.data.split(":")[1])
+    await payout_service.reject_payout(payout_id)
+    await callback.answer("❌ Request rejected.", show_alert=True)
+    await _show_finance_page(callback.message, page=0)

@@ -6,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from bot.config import settings
+from bot.models.application import JobApplication
 from bot.handlers.states import ApplyStates, CreateReferralStates, RequestPayoutStates
 from bot.keyboards.user_kb import (
     PAYOUT_HISTORY_PAGE_SIZE,
@@ -304,7 +305,9 @@ async def callback_referral_stats(callback: CallbackQuery) -> None:
         f"📝 Applications: {stats.total_applications}\n"
         f"  ⏳ Pending: {stats.total_pending}\n"
         f"  ❌ Declined: {stats.total_declined}\n"
-        f"  ✅ Accepted: {stats.total_accepted}\n"
+        f"  🤝 Deal Closed: {stats.total_deal_closed}\n"
+        f"  ✅ Joined Team: {stats.total_joined_team}\n"
+        f"  📚 Bought Course: {stats.total_bought_course}\n"
         f"💰 Total earned: ${stats.total_earned:.2f}",
         reply_markup=referral_stats_kb(),
     )
@@ -331,12 +334,21 @@ async def _show_links_page(target: Message, telegram_id: int, page: int) -> None
     page = min(page, total_pages - 1)
     page_links = links[page * REFERRAL_PAGE_SIZE:(page + 1) * REFERRAL_PAGE_SIZE]
 
+    counts: dict = {}
+    if page_links:
+        rows = await JobApplication.filter(
+            referral_id__in=[l.id for l in page_links]
+        ).values("referral_id")
+        for row in rows:
+            rid = row["referral_id"]
+            counts[rid] = counts.get(rid, 0) + 1
+
     if links:
         text = f"🔗 <b>Your Links</b>  (page {page + 1}/{total_pages})"
     else:
         text = "🔗 <b>Your Links</b>\n\nYou have no referral links yet. Create one to start earning!"
 
-    await target.edit_text(text, reply_markup=referral_links_list_kb(page_links, page, total_pages))
+    await target.edit_text(text, reply_markup=referral_links_list_kb(page_links, page, total_pages, counts))
 
 
 @router.callback_query(F.data.startswith("referral_detail:"))
@@ -356,7 +368,9 @@ async def callback_referral_detail(callback: CallbackQuery) -> None:
         f"📝 Applications: {stats.applications}\n"
         f"  ⏳ Pending: {stats.pending}\n"
         f"  ❌ Declined: {stats.declined}\n"
-        f"  ✅ Accepted: {stats.accepted}\n"
+        f"  🤝 Deal Closed: {stats.deal_closed}\n"
+        f"  ✅ Joined Team: {stats.joined_team}\n"
+        f"  📚 Bought Course: {stats.bought_course}\n"
         f"💰 Earned: ${stats.earned:.2f}\n\n"
         f"<code>{link}</code>",
         reply_markup=referral_detail_kb(),

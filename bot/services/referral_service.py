@@ -26,11 +26,6 @@ EARNING_TRIGGERS: dict[str, dict[str, str]] = {
     },
 }
 
-STATUSES_PENDING = ("Pending",)
-STATUSES_DECLINED = ("Declined",)
-STATUSES_ACCEPTED = ("Deal Closed", "Joined Team", "Bought Course")
-
-
 @dataclass
 class ReferralStats:
     referral: Referral
@@ -38,7 +33,9 @@ class ReferralStats:
     applications: int
     pending: int
     declined: int
-    accepted: int
+    deal_closed: int
+    joined_team: int
+    bought_course: int
     earned: Decimal
 
 
@@ -48,7 +45,9 @@ class AccountReferralStats:
     total_applications: int
     total_pending: int
     total_declined: int
-    total_accepted: int
+    total_deal_closed: int
+    total_joined_team: int
+    total_bought_course: int
     total_earned: Decimal
 
 
@@ -75,16 +74,20 @@ async def get_account_stats(account_id: int) -> AccountReferralStats:
     total_referred = await Account.filter(referred_by_code__in=codes).count() if codes else 0
     base = JobApplication.filter(referral__account_id=account_id)
     total_applications = await base.count()
-    total_pending = await base.filter(status__name__in=STATUSES_PENDING).count()
-    total_declined = await base.filter(status__name__in=STATUSES_DECLINED).count()
-    total_accepted = await base.filter(status__name__in=STATUSES_ACCEPTED).count()
+    total_pending = await base.filter(status__name="Pending").count()
+    total_declined = await base.filter(status__name="Declined").count()
+    total_deal_closed = await base.filter(status__name="Deal Closed").count()
+    total_joined_team = await base.filter(status__name="Joined Team").count()
+    total_bought_course = await base.filter(status__name="Bought Course").count()
     total_earned = await earning_repo.get_total_earned(account_id)
     return AccountReferralStats(
         total_referred=total_referred,
         total_applications=total_applications,
         total_pending=total_pending,
         total_declined=total_declined,
-        total_accepted=total_accepted,
+        total_deal_closed=total_deal_closed,
+        total_joined_team=total_joined_team,
+        total_bought_course=total_bought_course,
         total_earned=total_earned,
     )
 
@@ -93,9 +96,11 @@ async def get_referral_stats(referral: Referral) -> ReferralStats:
     referred_users = await Account.filter(referred_by_code=referral.code).count()
     base = JobApplication.filter(referral_id=referral.id)
     applications = await base.count()
-    pending = await base.filter(status__name__in=STATUSES_PENDING).count()
-    declined = await base.filter(status__name__in=STATUSES_DECLINED).count()
-    accepted = await base.filter(status__name__in=STATUSES_ACCEPTED).count()
+    pending = await base.filter(status__name="Pending").count()
+    declined = await base.filter(status__name="Declined").count()
+    deal_closed = await base.filter(status__name="Deal Closed").count()
+    joined_team = await base.filter(status__name="Joined Team").count()
+    bought_course = await base.filter(status__name="Bought Course").count()
     earned = await earning_repo.get_earned_by_referral(referral.id)
     return ReferralStats(
         referral=referral,
@@ -103,7 +108,9 @@ async def get_referral_stats(referral: Referral) -> ReferralStats:
         applications=applications,
         pending=pending,
         declined=declined,
-        accepted=accepted,
+        deal_closed=deal_closed,
+        joined_team=joined_team,
+        bought_course=bought_course,
         earned=earned,
     )
 
@@ -148,3 +155,24 @@ async def maybe_create_earning(
 
 async def get_total_earned(account_id: int) -> Decimal:
     return await earning_repo.get_total_earned(account_id)
+
+
+async def get_admin_overview() -> dict:
+    from bot.models.payout import PayoutRequest
+    total_referrers = await Referral.all().distinct().values_list("account_id", flat=True)
+    total_referrers_count = len(set(total_referrers))
+    total_referred = await Account.filter(referred_by_code__isnull=False).count()
+    total_applications = await JobApplication.filter(referral_id__isnull=False).count()
+    all_earnings = await ReferralEarning.all().values("amount")
+    total_earned = sum((r["amount"] for r in all_earnings), Decimal("0.00"))
+    pending_payouts = await PayoutRequest.filter(status="pending").values("amount")
+    pending_payout_amount = sum((r["amount"] for r in pending_payouts), Decimal("0.00"))
+    pending_payout_count = len(pending_payouts)
+    return {
+        "total_referrers": total_referrers_count,
+        "total_referred": total_referred,
+        "total_applications": total_applications,
+        "total_earned": total_earned,
+        "pending_payout_count": pending_payout_count,
+        "pending_payout_amount": pending_payout_amount,
+    }

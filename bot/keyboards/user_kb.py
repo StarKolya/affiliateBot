@@ -22,9 +22,7 @@ def main_menu_kb() -> ReplyKeyboardMarkup:
     """Persistent bottom keyboard shown after a user passes the subscription check."""
     builder = ReplyKeyboardBuilder()
     builder.button(text="📋 Browse Jobs")
-    builder.button(text="📊 My Applications")
     builder.button(text="🔗 Referral Links")
-    builder.button(text="💰 Request Payout")
     builder.adjust(2)
     return builder.as_markup(resize_keyboard=True)
 
@@ -73,11 +71,12 @@ def referral_stats_kb() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def referral_links_list_kb(links, page: int, total_pages: int) -> InlineKeyboardMarkup:
+def referral_links_list_kb(links, page: int, total_pages: int, counts: dict | None = None) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="➕ Create New Link", callback_data="referral_create")
     for link in links:
-        builder.button(text=link.name, callback_data=f"referral_detail:{link.id}")
+        count = (counts or {}).get(link.id, 0)
+        builder.button(text=f"{link.name} | applications: {count}", callback_data=f"referral_detail:{link.id}")
     nav = []
     if page > 0:
         nav.append(("◀️", f"referral_page:{page - 1}"))
