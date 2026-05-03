@@ -12,6 +12,7 @@ from bot.handlers.states import ApplyStates, CreateReferralStates, RequestPayout
 from bot.keyboards.user_kb import (
     PAYOUT_HISTORY_PAGE_SIZE,
     REFERRAL_PAGE_SIZE,
+    apply_cancel_kb,
     job_detail_kb,
     job_list_kb,
     main_menu_kb,
@@ -35,6 +36,11 @@ router = Router(name="user")
 _START_IMAGE = Path(__file__).parent.parent / "images" / "start.jpg"
 _NICHE_IMAGE = Path(__file__).parent.parent / "images" / "niche.jpg"
 _OFFER_IMAGE = Path(__file__).parent.parent / "images" / "offer.jpg"
+_REFERRAL_IMAGE = Path(__file__).parent.parent / "images" / "referral.jpg"
+_STATS_IMAGE = Path(__file__).parent.parent / "images" / "statistics.jpg"
+_FINANCE_IMAGE = Path(__file__).parent.parent / "images" / "finance.jpg"
+_TRANSACTION_IMAGE = Path(__file__).parent.parent / "images" / "transaction_history.jpg"
+_MY_LINKS_IMAGE = Path(__file__).parent.parent / "images" / "my_links.jpg"
 
 
 def _parse_referral_code(args: str | None) -> str | None:
@@ -93,8 +99,8 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot) -> None:
         )
     else:
         await message.answer(
-            "To use this bot you must be subscribed to our channel.\n"
-            "Please subscribe and then press the button below.",
+            "Для использования бота необходимо подписаться на наш канал.\n"
+            "Подпишись и нажми кнопку ниже.",
             reply_markup=subscription_check_kb(settings.CHANNEL_URL),
         )
 
@@ -105,14 +111,14 @@ async def callback_check_subscription(callback: CallbackQuery, bot: Bot) -> None
 
     account = await user_service.get_by_telegram_id(tg_user.id)
     if account is None:
-        await callback.answer("Please send /start first.", show_alert=True)
+        await callback.answer("Сначала отправь /start.", show_alert=True)
         return
 
     if account.subscription_verified:
         # Edge case: user pressed the button after already being verified
         await callback.message.delete()
         await callback.message.answer(
-            "You already have access!",
+            "У тебя уже есть доступ!",
             reply_markup=main_menu_kb(),
         )
         await callback.answer()
@@ -137,16 +143,16 @@ async def callback_check_subscription(callback: CallbackQuery, bot: Bot) -> None
         await callback.answer()
     else:
         await callback.answer(
-            "You are not subscribed yet. Please join the channel and try again.",
+            "Ты ещё не подписан. Вступи в канал и попробуй снова.",
             show_alert=True,
         )
 
 
-@router.message(F.text == "📋 Browse Jobs")
+@router.message(F.text == "📋 Вакансии")
 async def cmd_browse_jobs(message: Message) -> None:
     niches = await job_service.list_active_niches()
     if not niches:
-        await message.answer("No active niches available at the moment.")
+        await message.answer("<b>Нет доступных направлений.</b>")
         return
     await message.answer_photo(
         FSInputFile(_NICHE_IMAGE),
@@ -159,7 +165,7 @@ async def cmd_browse_jobs(message: Message) -> None:
 async def callback_browse_jobs(callback: CallbackQuery) -> None:
     niches = await job_service.list_active_niches()
     if not niches:
-        await callback.message.edit_text("No active niches available at the moment.")
+        await callback.message.edit_caption(caption="<b>Нет доступных направлений.</b>")
         await callback.answer()
         return
     await callback.message.edit_media(
@@ -178,7 +184,7 @@ async def callback_select_niche(callback: CallbackQuery) -> None:
     jobs = await job_service.list_jobs_by_niche(niche_id)
     logger.info("Niche selected | telegram_id=%s niche_id=%s jobs_found=%s", callback.from_user.id, niche_id, len(jobs))
     if not jobs:
-        await callback.answer("No jobs available in this niche right now.", show_alert=True)
+        await callback.answer("В этом направлении пока нет вакансий.", show_alert=True)
         return
     if len(jobs) == 1:
         job = jobs[0]
@@ -205,9 +211,10 @@ async def callback_job_detail(callback: CallbackQuery) -> None:
     logger.info("Job detail viewed | telegram_id=%s job_id=%s", callback.from_user.id, job_id)
     job = await job_service.get_job(job_id)
     if job is None:
-        await callback.answer("Job no longer available.", show_alert=True)
+        await callback.answer("Вакансия больше недоступна.", show_alert=True)
         return
-    await callback.message.edit_text(
+    await callback.message.delete()
+    await callback.message.answer(
         _format_job(job),
         reply_markup=job_detail_kb(job.id, back_callback=f"niche:{niche_id}"),
     )
@@ -215,7 +222,7 @@ async def callback_job_detail(callback: CallbackQuery) -> None:
 
 
 def _format_job(job) -> str:
-    lines = [f"💼 {job.title}", f"Type: {job.type}"]
+    lines = [f"<b>💼 {job.title}</b>", f"📌 Тип: {job.type}"]
     if job.description:
         lines += ["", job.description]
     return "\n".join(lines)
@@ -231,7 +238,7 @@ async def callback_apply(callback: CallbackQuery, state: FSMContext) -> None:
 
     job = await job_service.get_job_with_questions(job_id)
     if job is None:
-        await callback.answer("Job no longer available.", show_alert=True)
+        await callback.answer("Вакансия больше недоступна.", show_alert=True)
         return
 
     questions = sorted(job.job_questions, key=lambda jq: jq.order)
@@ -244,9 +251,9 @@ async def callback_apply(callback: CallbackQuery, state: FSMContext) -> None:
                 referred_by_code=account.referred_by_code,
             )
         except ValueError:
-            await callback.answer("You have already applied for this job.", show_alert=True)
+            await callback.answer("Вы уже откликались на эту вакансию.", show_alert=True)
             return
-        await callback.message.edit_text("✅ Your application has been submitted!")
+        await callback.message.edit_text("✅ Ваша заявка отправлена!")
         await callback.answer()
         return
 
@@ -264,7 +271,8 @@ async def callback_apply(callback: CallbackQuery, state: FSMContext) -> None:
     )
     first = questions[0]
     await callback.message.edit_text(
-        f"Question 1/{len(questions)}:\n\n{first.question.description}"
+        f"<b>Вопрос 1/{len(questions)}:</b>\n\n{first.question.description}",
+        reply_markup=apply_cancel_kb(),
     )
     await callback.answer()
 
@@ -281,7 +289,7 @@ async def fsm_collect_answer(message: Message, state: FSMContext) -> None:
         try:
             float(message.text.replace(",", "."))
         except ValueError:
-            await message.answer("Please enter a valid number:")
+            await message.answer("Пожалуйста, введите корректное число:")
             return
 
     answers[str(current_q["id"])] = message.text
@@ -290,7 +298,7 @@ async def fsm_collect_answer(message: Message, state: FSMContext) -> None:
     if index < len(questions):
         await state.update_data(index=index, answers=answers)
         next_q = questions[index]
-        await message.answer(f"Question {index + 1}/{len(questions)}:\n\n{next_q['text']}")
+        await message.answer(f"<b>Вопрос {index + 1}/{len(questions)}:</b>\n\n{next_q['text']}", reply_markup=apply_cancel_kb())
         return
 
     await state.clear()
@@ -305,30 +313,44 @@ async def fsm_collect_answer(message: Message, state: FSMContext) -> None:
             answers={int(k): v for k, v in answers.items()},
         )
     except ValueError:
-        await message.answer("You have already applied for this job.")
+        await message.answer("Вы уже откликались на эту вакансию.")
         return
 
-    await message.answer("✅ Your application has been submitted!")
+    await message.answer("✅ Ваша заявка отправлена!")
+
+
+@router.callback_query(ApplyStates.answering, F.data == "apply_cancel")
+async def callback_apply_cancel(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    await callback.message.edit_text("❌ Заявка отменена.")
+    await callback.answer()
 
 
 # --- Referral links ---
 
-@router.message(F.text == "🔗 Referral Links")
+_REFERRAL_CAPTION = (
+    "<b><blockquote>👥 Jobs Network Partners</blockquote>\n\n"
+    "📊 Лей трафик — забирай максимум с каждого лида.\n\n"
+    "<blockquote>🔴 Без ограничений</blockquote>\n"
+    "<blockquote>🔵 Только результат</blockquote></b>"
+)
+
+
+@router.message(F.text == "🔗 Рефералы")
 async def cmd_referral_links(message: Message) -> None:
-    await message.answer(
-        "👥 <b>Referral Program</b>\n\n"
-        "Create referral links, share them, and earn commission every time "
-        "someone you referred gets hired.",
+    await message.answer_photo(
+        FSInputFile(_REFERRAL_IMAGE),
+        caption=_REFERRAL_CAPTION,
         reply_markup=referral_menu_kb(),
     )
 
 
 @router.callback_query(F.data == "referral_menu")
 async def callback_referral_menu(callback: CallbackQuery) -> None:
-    await callback.message.edit_text(
-        "👥 <b>Referral Program</b>\n\n"
-        "Create referral links, share them, and earn commission every time "
-        "someone you referred gets hired.",
+    await callback.message.delete()
+    await callback.message.answer_photo(
+        FSInputFile(_REFERRAL_IMAGE),
+        caption=_REFERRAL_CAPTION,
         reply_markup=referral_menu_kb(),
     )
     await callback.answer()
@@ -338,16 +360,21 @@ async def callback_referral_menu(callback: CallbackQuery) -> None:
 async def callback_referral_stats(callback: CallbackQuery) -> None:
     account = await user_service.get_by_telegram_id(callback.from_user.id)
     stats = await referral_service.get_account_stats(account.id)
-    await callback.message.edit_text(
-        f"📊 <b>Your Stats</b>\n\n"
-        f"👥 Total referred: {stats.total_referred}\n"
-        f"📝 Applications: {stats.total_applications}\n"
-        f"  ⏳ Pending: {stats.total_pending}\n"
-        f"  ❌ Declined: {stats.total_declined}\n"
-        f"  🤝 Deal Closed: {stats.total_deal_closed}\n"
-        f"  ✅ Joined Team: {stats.total_joined_team}\n"
-        f"  📚 Bought Course: {stats.total_bought_course}\n"
-        f"💰 Total earned: ${stats.total_earned:.2f}",
+    await callback.message.edit_media(
+        InputMediaPhoto(
+            media=FSInputFile(_STATS_IMAGE),
+            caption=(
+                f"<b><blockquote>📊 Статистика</blockquote>\n\n"
+                f"👥 Привлечено пользователей: {stats.total_referred}\n"
+                f"📝 Всего заявок: {stats.total_applications}\n"
+                f"  ⏳ На рассмотрении: {stats.total_pending}\n"
+                f"  ❌ Отклонено: {stats.total_declined}\n"
+                f"  🤝 Сделка закрыта: {stats.total_deal_closed}\n"
+                f"  ✅ Вступил в команду: {stats.total_joined_team}\n"
+                f"  📚 Купил курс: {stats.total_bought_course}\n\n"
+                f"💰 Всего заработано: ${stats.total_earned:.2f}</b>"
+            ),
+        ),
         reply_markup=referral_stats_kb(),
     )
     await callback.answer()
@@ -382,12 +409,17 @@ async def _show_links_page(target: Message, telegram_id: int, page: int) -> None
             rid = row["referral_id"]
             counts[rid] = counts.get(rid, 0) + 1
 
-    if links:
-        text = f"🔗 <b>Your Links</b>  (page {page + 1}/{total_pages})"
-    else:
-        text = "🔗 <b>Your Links</b>\n\nYou have no referral links yet. Create one to start earning!"
+    caption = f"<b><blockquote>🔗 Мои ссылки ({len(links)})</blockquote></b>"
+    kb = referral_links_list_kb(page_links, page, total_pages, counts)
 
-    await target.edit_text(text, reply_markup=referral_links_list_kb(page_links, page, total_pages, counts))
+    if target.photo:
+        await target.edit_media(
+            InputMediaPhoto(media=FSInputFile(_MY_LINKS_IMAGE), caption=caption),
+            reply_markup=kb,
+        )
+    else:
+        await target.delete()
+        await target.answer_photo(FSInputFile(_MY_LINKS_IMAGE), caption=caption, reply_markup=kb)
 
 
 @router.callback_query(F.data.startswith("referral_detail:"))
@@ -401,16 +433,17 @@ async def callback_referral_detail(callback: CallbackQuery) -> None:
         return
     stats = await referral_service.get_referral_stats(referral)
     link = f"https://t.me/{settings.BOT_USERNAME}?start=ref={referral.code}"
-    await callback.message.edit_text(
-        f"🔗 <b>{referral.name}</b>\n\n"
-        f"👥 Referred: {stats.referred_users}\n"
-        f"📝 Applications: {stats.applications}\n"
-        f"  ⏳ Pending: {stats.pending}\n"
-        f"  ❌ Declined: {stats.declined}\n"
-        f"  🤝 Deal Closed: {stats.deal_closed}\n"
-        f"  ✅ Joined Team: {stats.joined_team}\n"
-        f"  📚 Bought Course: {stats.bought_course}\n"
-        f"💰 Earned: ${stats.earned:.2f}\n\n"
+    await callback.message.delete()
+    await callback.message.answer(
+        f"<b><blockquote>🔗 {referral.name}</blockquote>\n\n"
+        f"👥 Привлечено: {stats.referred_users}\n"
+        f"📝 Заявок: {stats.applications}\n"
+        f"  ⏳ На рассмотрении: {stats.pending}\n"
+        f"  ❌ Отклонено: {stats.declined}\n"
+        f"  🤝 Сделка закрыта: {stats.deal_closed}\n"
+        f"  ✅ Вступил в команду: {stats.joined_team}\n"
+        f"  📚 Купил курс: {stats.bought_course}\n\n"
+        f"💰 Заработано: ${stats.earned:.2f}\n\n"
         f"<code>{link}</code>",
         reply_markup=referral_detail_kb(),
     )
@@ -420,8 +453,9 @@ async def callback_referral_detail(callback: CallbackQuery) -> None:
 @router.callback_query(F.data == "referral_create")
 async def callback_referral_create(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(CreateReferralStates.enter_name)
-    await callback.message.edit_text(
-        "Enter a name for this referral link (e.g. <i>Instagram</i>, <i>Friends</i>):"
+    await callback.message.delete()
+    await callback.message.answer(
+        "Введи название для реферальной ссылки (например: <i>Instagram</i>, <i>Друзья</i>):"
     )
     await callback.answer()
 
@@ -430,7 +464,7 @@ async def callback_referral_create(callback: CallbackQuery, state: FSMContext) -
 async def fsm_referral_enter_name(message: Message, state: FSMContext) -> None:
     name = message.text.strip()
     if len(name) > 50:
-        await message.answer("Name is too long. Please keep it under 50 characters:")
+        await message.answer("Слишком длинное название. Максимум 50 символов:")
         return
 
     account = await user_service.get_by_telegram_id(message.from_user.id)
@@ -439,9 +473,9 @@ async def fsm_referral_enter_name(message: Message, state: FSMContext) -> None:
     referral = await referral_service.create_referral_link(account_id=account.id, name=name)
     link = f"https://t.me/{settings.BOT_USERNAME}?start=ref={referral.code}"
     await message.answer(
-        f"✅ <b>{referral.name}</b> created!\n\n"
+        f"✅ <b>{referral.name}</b> создана!\n\n"
         f"<code>{link}</code>\n\n"
-        "Share this link — you'll earn commission when your referrals get hired.",
+        "Делись ссылкой — получай комиссию с каждого нанятого реферала.",
         reply_markup=referral_menu_kb(),
     )
 
@@ -451,20 +485,24 @@ async def fsm_referral_enter_name(message: Message, state: FSMContext) -> None:
 async def _show_payout_menu(target: Message, telegram_id: int, edit: bool = True) -> None:
     account = await user_service.get_by_telegram_id(telegram_id)
     summary = await payout_service.get_user_summary(account.id)
-    text = (
-        f"💰 <b>Payouts</b>\n\n"
-        f"⏳ Pending: ${summary.pending_amount:.2f}\n"
-        f"✅ Paid out: ${summary.paid_out_amount:.2f}\n"
-        f"💵 Available: ${summary.available_amount:.2f}"
+    caption = (
+        f"<b><blockquote>💰 Финансы</blockquote>\n\n"
+        f"💵 Баланс: ${summary.available_amount:.2f}\n"
+        f"⌛️ В обработке: ${summary.pending_amount:.2f}\n"
+        f"✅ Выплачено: ${summary.paid_out_amount:.2f}\n\n"
+        f"<blockquote>👉 Средства на балансе доступны для вывода</blockquote></b>"
     )
     kb = payout_menu_kb(has_available=summary.available_amount > 0)
     if edit:
-        await target.edit_text(text, reply_markup=kb)
+        await target.edit_media(
+            InputMediaPhoto(media=FSInputFile(_FINANCE_IMAGE), caption=caption),
+            reply_markup=kb,
+        )
     else:
-        await target.answer(text, reply_markup=kb)
+        await target.answer_photo(FSInputFile(_FINANCE_IMAGE), caption=caption, reply_markup=kb)
 
 
-@router.message(F.text == "💰 Request Payout")
+@router.message(F.text == "💼 Финансы")
 async def cmd_payout_menu(message: Message) -> None:
     await _show_payout_menu(message, message.from_user.id, edit=False)
 
@@ -496,17 +534,26 @@ async def _show_payout_history_page(target: Message, telegram_id: int, page: int
     page_payouts = payouts[page * PAYOUT_HISTORY_PAGE_SIZE:(page + 1) * PAYOUT_HISTORY_PAGE_SIZE]
 
     STATUS_ICON = {"pending": "⏳", "approved": "✅", "rejected": "❌"}
+    STATUS_RU = {"pending": "В обработке", "approved": "Выплачено", "rejected": "Отклонено"}
     if page_payouts:
-        lines = [f"📋 <b>Payout History</b>  (page {page + 1}/{total_pages})\n"]
+        lines = [f"<b><blockquote>📋 История выплат</blockquote>\n"]
         for p in page_payouts:
             icon = STATUS_ICON.get(p.status, "•")
+            status = STATUS_RU.get(p.status, p.status)
             date = p.created_at.strftime("%d %b %Y")
-            lines.append(f"{icon} ${p.amount:.2f} — {p.status} — {date}")
-        text = "\n".join(lines)
+            lines.append(f"{icon} ${p.amount:.2f} — {status} — {date}")
+        caption = "\n".join(lines) + "</b>"
     else:
-        text = "📋 <b>Payout History</b>\n\nNo payout requests yet."
+        caption = (
+            "<b><blockquote>📋 История выплат</blockquote>\n\n"
+            "🪫 Пока нет транзакций\n"
+            "<blockquote>Начни привлекать трафик, чтобы получить первую выплату 🫵</blockquote></b>"
+        )
 
-    await target.edit_text(text, reply_markup=payout_history_kb(page_payouts, page, total_pages))
+    await target.edit_media(
+        InputMediaPhoto(media=FSInputFile(_TRANSACTION_IMAGE), caption=caption),
+        reply_markup=payout_history_kb(page_payouts, page, total_pages),
+    )
 
 
 @router.callback_query(F.data == "payout_create")
@@ -515,8 +562,11 @@ async def callback_payout_create(callback: CallbackQuery, state: FSMContext) -> 
     summary = await payout_service.get_user_summary(account.id)
     await state.set_state(RequestPayoutStates.enter_amount)
     await state.update_data(account_id=account.id, available=str(summary.available_amount))
-    await callback.message.edit_text(
-        f"Enter the amount to request, or tap the button below to request everything available:",
+    await callback.message.edit_media(
+        InputMediaPhoto(
+            media=FSInputFile(_FINANCE_IMAGE),
+            caption="<b><blockquote>💰 Финансы</blockquote>\n\nВведи сумму или нажми кнопку ниже, чтобы вывести всё доступное:</b>",
+        ),
         reply_markup=payout_create_kb(summary.available_amount),
     )
     await callback.answer()
@@ -533,8 +583,11 @@ async def callback_payout_all_available(callback: CallbackQuery, state: FSMConte
     except ValueError as e:
         await callback.answer(str(e), show_alert=True)
         return
-    await callback.message.edit_text(
-        f"✅ Payout request for <b>${amount:.2f}</b> submitted!",
+    await callback.message.edit_media(
+        InputMediaPhoto(
+            media=FSInputFile(_FINANCE_IMAGE),
+            caption=f"<b><blockquote>💰 Финансы</blockquote>\n\n✅ Заявка на вывод <b>${amount:.2f}</b> отправлена!</b>",
+        ),
         reply_markup=payout_menu_kb(has_available=False),
     )
     await callback.answer()
@@ -545,16 +598,16 @@ async def fsm_payout_enter_amount(message: Message, state: FSMContext) -> None:
     try:
         amount = Decimal(message.text.strip().replace(",", "."))
     except InvalidOperation:
-        await message.answer("Please enter a valid number:")
+        await message.answer("Пожалуйста, введите корректное число:")
         return
     if amount <= 0:
-        await message.answer("Amount must be greater than zero:")
+        await message.answer("Сумма должна быть больше нуля:")
         return
 
     data = await state.get_data()
     available = Decimal(data["available"])
     if amount > available:
-        await message.answer(f"Amount exceeds your available balance (${available:.2f}). Enter a lower amount:")
+        await message.answer(f"Сумма превышает доступный баланс (${available:.2f}). Введи меньшую сумму:")
         return
 
     await state.clear()
@@ -563,7 +616,8 @@ async def fsm_payout_enter_amount(message: Message, state: FSMContext) -> None:
     except ValueError as e:
         await message.answer(str(e))
         return
-    await message.answer(
-        f"✅ Payout request for <b>${amount:.2f}</b> submitted!",
+    await message.answer_photo(
+        FSInputFile(_FINANCE_IMAGE),
+        caption=f"<b><blockquote>💰 Финансы</blockquote>\n\n✅ Заявка на вывод <b>${amount:.2f}</b> отправлена!</b>",
         reply_markup=payout_menu_kb(has_available=False),
     )

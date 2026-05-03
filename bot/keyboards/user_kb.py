@@ -12,8 +12,8 @@ def subscription_check_kb(channel_url: Optional[str] = None) -> InlineKeyboardMa
     """
     builder = InlineKeyboardBuilder()
     if channel_url:
-        builder.button(text="📢 Subscribe to channel", url=channel_url)
-    builder.button(text="✅ I subscribed", callback_data="check_subscription")
+        builder.button(text="📢 Подписаться на канал", url=channel_url)
+    builder.button(text="✅ Я подписался", callback_data="check_subscription")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -21,8 +21,8 @@ def subscription_check_kb(channel_url: Optional[str] = None) -> InlineKeyboardMa
 def main_menu_kb() -> ReplyKeyboardMarkup:
     """Persistent bottom keyboard shown after a user passes the subscription check."""
     builder = ReplyKeyboardBuilder()
-    builder.button(text="📋 Browse Jobs")
-    builder.button(text="🔗 Referral Links")
+    builder.button(text="📋 Вакансии")
+    builder.button(text="🔗 Рефералы")
     builder.adjust(2)
     return builder.as_markup(resize_keyboard=True)
 
@@ -39,15 +39,22 @@ def job_list_kb(jobs, niche_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for job in jobs:
         builder.button(text=job.title, callback_data=f"job:{job.id}:{niche_id}:multi")
-    builder.button(text="⬅️ Back to niches", callback_data="browse_jobs")
+    builder.button(text="⬅️ Назад к направлениям", callback_data="browse_jobs")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def apply_cancel_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="❌ Отменить заявку", callback_data="apply_cancel")
     builder.adjust(1)
     return builder.as_markup()
 
 
 def job_detail_kb(job_id: int, back_callback: str) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="✅ Apply", callback_data=f"apply:{job_id}")
-    builder.button(text="⬅️ Back", callback_data=back_callback)
+    builder.button(text="✅ Откликнуться", callback_data=f"apply:{job_id}")
+    builder.button(text="⬅️ Назад", callback_data=back_callback)
     builder.adjust(1)
     return builder.as_markup()
 
@@ -57,26 +64,27 @@ REFERRAL_PAGE_SIZE = 5
 
 def referral_menu_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="📊 Stats", callback_data="referral_stats")
-    builder.button(text="🔗 My Links", callback_data="referral_links")
-    builder.adjust(2)
+    builder.button(text="📊 Статистика", callback_data="referral_stats")
+    builder.button(text="🔗 Мои ссылки", callback_data="referral_links")
+    builder.button(text="🌐 Website", url="https://example.com")
+    builder.adjust(1)
     return builder.as_markup()
 
 
 def referral_stats_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="💰 Request Payout", callback_data="payout_menu")
-    builder.button(text="⬅️ Back", callback_data="referral_menu")
+    builder.button(text="💼 Финансы", callback_data="payout_menu")
+    builder.button(text="⬅️ Назад", callback_data="referral_menu")
     builder.adjust(1)
     return builder.as_markup()
 
 
 def referral_links_list_kb(links, page: int, total_pages: int, counts: dict | None = None) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="➕ Create New Link", callback_data="referral_create")
+    builder.button(text="➕ Создать новый линк", callback_data="referral_create")
     for link in links:
         count = (counts or {}).get(link.id, 0)
-        builder.button(text=f"{link.name} | applications: {count}", callback_data=f"referral_detail:{link.id}")
+        builder.button(text=f"{link.name} | Откликов: {count}", callback_data=f"referral_detail:{link.id}")
     nav = []
     if page > 0:
         nav.append(("◀️", f"referral_page:{page - 1}"))
@@ -84,7 +92,7 @@ def referral_links_list_kb(links, page: int, total_pages: int, counts: dict | No
         nav.append(("▶️", f"referral_page:{page + 1}"))
     for text, cb in nav:
         builder.button(text=text, callback_data=cb)
-    builder.button(text="⬅️ Back", callback_data="referral_menu")
+    builder.button(text="⬅️ Назад", callback_data="referral_menu")
     row_sizes = [1] + [1] * len(links)
     if nav:
         row_sizes.append(len(nav))
@@ -95,7 +103,7 @@ def referral_links_list_kb(links, page: int, total_pages: int, counts: dict | No
 
 def referral_detail_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="⬅️ Back to links", callback_data="referral_links")
+    builder.button(text="⬅️ Назад к ссылкам", callback_data="referral_links")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -103,8 +111,8 @@ def referral_detail_kb() -> InlineKeyboardMarkup:
 def payout_menu_kb(has_available: bool) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     if has_available:
-        builder.button(text="➕ Create Request", callback_data="payout_create")
-    builder.button(text="📋 History", callback_data="payout_history")
+        builder.button(text="➕ Запросить выплату", callback_data="payout_create")
+    builder.button(text="📋 История", callback_data="payout_history")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -121,7 +129,7 @@ def payout_history_kb(payouts, page: int, total_pages: int) -> InlineKeyboardMar
         nav.append(("▶️", f"payout_history_page:{page + 1}"))
     for text, cb in nav:
         builder.button(text=text, callback_data=cb)
-    builder.button(text="⬅️ Back", callback_data="payout_menu")
+    builder.button(text="⬅️ Назад", callback_data="payout_menu")
     row_sizes = []
     if nav:
         row_sizes.append(len(nav))
@@ -133,9 +141,9 @@ def payout_history_kb(payouts, page: int, total_pages: int) -> InlineKeyboardMar
 def payout_create_kb(available_amount) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(
-        text=f"💰 All available (${available_amount:.2f})",
+        text=f"💰 Вывести всё (${available_amount:.2f})",
         callback_data="payout_all_available",
     )
-    builder.button(text="❌ Cancel", callback_data="payout_menu")
+    builder.button(text="❌ Отмена", callback_data="payout_menu")
     builder.adjust(1)
     return builder.as_markup()
