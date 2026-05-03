@@ -1,9 +1,10 @@
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 
 from aiogram import Bot, F, Router
 from aiogram.filters import CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, FSInputFile, InputMediaPhoto, Message
 
 from bot.config import settings
 from bot.models.application import JobApplication
@@ -31,6 +32,10 @@ from bot.utils.telegram import is_channel_member
 logger = get_logger(__name__)
 router = Router(name="user")
 
+_START_IMAGE = Path(__file__).parent.parent / "images" / "start.jpg"
+_NICHE_IMAGE = Path(__file__).parent.parent / "images" / "niche.jpg"
+_OFFER_IMAGE = Path(__file__).parent.parent / "images" / "offer.jpg"
+
 
 def _parse_referral_code(args: str | None) -> str | None:
     """Extracts the code from a deep-link payload like 'ref=abc123'."""
@@ -57,8 +62,15 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot) -> None:
     if not created:
         # Existing user — subscription already verified at registration, skip check
         logger.info("Returning user | telegram_id=%s", tg_user.id)
-        await message.answer(
-            f"Welcome back, {account.name}!",
+        await message.answer_photo(
+            FSInputFile(_START_IMAGE),
+            caption=f"<b>Добро пожаловать, {account.name}!\n\n"
+            "🌐 Ты попал в Jobs Network\n"
+            "<blockquote>место, где находят себя в digital-индустрии</blockquote>\n\n"
+            "🫵 Здесь тебя ждут:\n"
+            "<blockquote>🔹 Удалённые вакансии\n"
+            "🔹 Арбитраж трафика\n"
+            "🔹 Работа с инфлюенсерами</blockquote></b>",
             reply_markup=main_menu_kb(),
         )
         return
@@ -68,8 +80,15 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot) -> None:
 
     if subscribed:
         await user_service.mark_subscription_verified(account)
-        await message.answer(
-            f"Welcome, {account.name}! You're now registered.",
+        await message.answer_photo(
+            FSInputFile(_START_IMAGE),
+            caption=f"<b>Добро пожаловать, {account.name}!\n\n"
+            "🌐 Ты попал в Jobs Network\n"
+            "<blockquote>место, где находят себя в digital-индустрии</blockquote>\n\n"
+            "🫵 Здесь тебя ждут:\n"
+            "<blockquote>🔹 Удалённые вакансии\n"
+            "🔹 Арбитраж трафика\n"
+            "🔹 Работа с инфлюенсерами</blockquote></b>",
             reply_markup=main_menu_kb(),
         )
     else:
@@ -104,8 +123,15 @@ async def callback_check_subscription(callback: CallbackQuery, bot: Bot) -> None
     if subscribed:
         await user_service.mark_subscription_verified(account)
         await callback.message.delete()
-        await callback.message.answer(
-            f"Welcome, {account.name}! You're now registered.",
+        await callback.message.answer_photo(
+            FSInputFile(_START_IMAGE),
+            caption=f"<b>Добро пожаловать, {account.name}!\n\n"
+            "🌐 Ты попал в Jobs Network\n"
+            "<blockquote>место, где находят себя в digital-индустрии</blockquote>\n\n"
+            "🫵 Здесь тебя ждут:\n"
+            "<blockquote>🔹 Удалённые вакансии\n"
+            "🔹 Арбитраж трафика\n"
+            "🔹 Работа с инфлюенсерами</blockquote></b>",
             reply_markup=main_menu_kb(),
         )
         await callback.answer()
@@ -122,7 +148,11 @@ async def cmd_browse_jobs(message: Message) -> None:
     if not niches:
         await message.answer("No active niches available at the moment.")
         return
-    await message.answer("Select a niche to browse jobs:", reply_markup=niche_list_kb(niches))
+    await message.answer_photo(
+        FSInputFile(_NICHE_IMAGE),
+        caption="<b><blockquote>📁 Выберите направление:</blockquote></b>",
+        reply_markup=niche_list_kb(niches),
+    )
 
 
 @router.callback_query(F.data == "browse_jobs")
@@ -132,8 +162,12 @@ async def callback_browse_jobs(callback: CallbackQuery) -> None:
         await callback.message.edit_text("No active niches available at the moment.")
         await callback.answer()
         return
-    await callback.message.edit_text(
-        "Select a niche to browse jobs:", reply_markup=niche_list_kb(niches)
+    await callback.message.edit_media(
+        InputMediaPhoto(
+            media=FSInputFile(_NICHE_IMAGE),
+            caption="<b><blockquote>📁 Выберите направление:</blockquote></b>",
+        ),
+        reply_markup=niche_list_kb(niches),
     )
     await callback.answer()
 
@@ -148,13 +182,18 @@ async def callback_select_niche(callback: CallbackQuery) -> None:
         return
     if len(jobs) == 1:
         job = jobs[0]
-        await callback.message.edit_text(
+        await callback.message.delete()
+        await callback.message.answer(
             _format_job(job),
             reply_markup=job_detail_kb(job.id, back_callback="browse_jobs"),
         )
     else:
-        await callback.message.edit_text(
-            "Choose a job:", reply_markup=job_list_kb(jobs, niche_id)
+        await callback.message.edit_media(
+            InputMediaPhoto(
+                media=FSInputFile(_OFFER_IMAGE),
+                caption="<b><blockquote>📋 Выберите вакансию:</blockquote></b>",
+            ),
+            reply_markup=job_list_kb(jobs, niche_id),
         )
     await callback.answer()
 
