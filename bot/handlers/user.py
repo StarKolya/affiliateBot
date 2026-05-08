@@ -67,71 +67,48 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot) -> None:
         referral_code=referral_code,
     )
 
-    if not created:
-        # Existing user — subscription already verified at registration, skip check
-        logger.info("Returning user | telegram_id=%s", tg_user.id)
-        # If the link is bound to a job, redirect directly to that job posting
-        if referral_code:
-            referral = await referral_service.get_referral_by_code(referral_code)
-            if referral and referral.job_posting_id:
-                job = await job_service.get_job(referral.job_posting_id)
-                if job:
-                    await message.answer_photo(
-                        FSInputFile(_START_IMAGE),
-                        caption=f"<b>Добро пожаловать, {account.name}!</b>",
-                        reply_markup=main_menu_kb(),
-                    )
-                    await message.answer(
-                        _format_job(job),
-                        reply_markup=job_detail_kb(job.id, back_callback="browse_jobs"),
-                    )
-                    return
-        await message.answer_photo(
-            FSInputFile(_START_IMAGE),
-            caption=f"<b>Добро пожаловать, {account.name}!\n\n"
-            "🌐 Ты попал в Jobs Network\n"
-            "<blockquote>место, где находят себя в digital-индустрии</blockquote>\n\n"
-            "🫵 Здесь тебя ждут:\n"
-            "<blockquote>🔹 Удалённые вакансии\n"
-            "🔹 Арбитраж трафика\n"
-            "🔹 Работа с инфлюенсерами</blockquote></b>",
-            reply_markup=main_menu_kb(),
-        )
-        return
-
-    # New user — perform the one-time channel subscription check
     channel_ids = [settings.CHANNEL_ID] + ([settings.CHANNEL_ID_2] if settings.CHANNEL_ID_2 else [])
     subscribed = await is_subscribed_to_all(bot, channel_ids, tg_user.id)
 
-    if subscribed:
-        await user_service.mark_subscription_verified(account)
-        bound_job = None
-        if referral_code:
-            referral = await referral_service.get_referral_by_code(referral_code)
-            if referral and referral.job_posting_id:
-                bound_job = await job_service.get_job(referral.job_posting_id)
-        await message.answer_photo(
-            FSInputFile(_START_IMAGE),
-            caption=f"<b>Добро пожаловать, {account.name}!\n\n"
-            "🌐 Ты попал в Jobs Network\n"
-            "<blockquote>место, где находят себя в digital-индустрии</blockquote>\n\n"
-            "🫵 Здесь тебя ждут:\n"
-            "<blockquote>🔹 Удалённые вакансии\n"
-            "🔹 Арбитраж трафика\n"
-            "🔹 Работа с инфлюенсерами</blockquote></b>",
-            reply_markup=main_menu_kb(),
-        )
-        if bound_job:
-            await message.answer(
-                _format_job(bound_job),
-                reply_markup=job_detail_kb(bound_job.id, back_callback="browse_jobs"),
-            )
-    else:
+    if not subscribed:
         await message.answer_photo(
             FSInputFile(_START_IMAGE),
             caption="Для использования бота необходимо подписаться на наш канал и вступить в группу.\n"
             "Подпишись и нажми кнопку ниже.",
             reply_markup=subscription_check_kb(settings.CHANNEL_URL, settings.CHANNEL_URL_2),
+        )
+        return
+
+    if created:
+        await user_service.mark_subscription_verified(account)
+
+    bound_job = None
+    if referral_code:
+        referral = await referral_service.get_referral_by_code(referral_code)
+        if referral and referral.job_posting_id:
+            bound_job = await job_service.get_job(referral.job_posting_id)
+
+    if bound_job:
+        await message.answer_photo(
+            FSInputFile(_START_IMAGE),
+            caption=f"<b>Добро пожаловать, {account.name}!</b>",
+            reply_markup=main_menu_kb(),
+        )
+        await message.answer(
+            _format_job(bound_job),
+            reply_markup=job_detail_kb(bound_job.id, back_callback="browse_jobs"),
+        )
+    else:
+        await message.answer_photo(
+            FSInputFile(_START_IMAGE),
+            caption=f"<b>Добро пожаловать, {account.name}!\n\n"
+            "🌐 Ты попал в Jobs Network\n"
+            "<blockquote>место, где находят себя в digital-индустрии</blockquote>\n\n"
+            "🫵 Здесь тебя ждут:\n"
+            "<blockquote>🔹 Удалённые вакансии\n"
+            "🔹 Арбитраж трафика\n"
+            "🔹 Работа с инфлюенсерами</blockquote></b>",
+            reply_markup=main_menu_kb(),
         )
 
 
@@ -144,21 +121,14 @@ async def callback_check_subscription(callback: CallbackQuery, bot: Bot) -> None
         await callback.answer("Сначала отправь /start.", show_alert=True)
         return
 
-    if account.subscription_verified:
-        # Edge case: user pressed the button after already being verified
-        await callback.message.delete()
-        await callback.message.answer(
-            "У тебя уже есть доступ!",
-            reply_markup=main_menu_kb(),
-        )
-        await callback.answer()
-        return
-
     channel_ids = [settings.CHANNEL_ID] + ([settings.CHANNEL_ID_2] if settings.CHANNEL_ID_2 else [])
     subscribed = await is_subscribed_to_all(bot, channel_ids, tg_user.id)
 
+    await callback.answer()
+
     if subscribed:
-        await user_service.mark_subscription_verified(account)
+        if not account.subscription_verified:
+            await user_service.mark_subscription_verified(account)
         await callback.message.delete()
         await callback.message.answer_photo(
             FSInputFile(_START_IMAGE),
@@ -171,11 +141,11 @@ async def callback_check_subscription(callback: CallbackQuery, bot: Bot) -> None
             "🔹 Работа с инфлюенсерами</blockquote></b>",
             reply_markup=main_menu_kb(),
         )
-        await callback.answer()
     else:
-        await callback.answer(
-            "Ты ещё не подписан на все каналы. Вступи и попробуй снова.",
-            show_alert=True,
+        await callback.message.edit_caption(
+            caption="❌ Ты ещё не подписался на все каналы.\n\n"
+            "Подпишись и нажми кнопку снова.",
+            reply_markup=subscription_check_kb(settings.CHANNEL_URL, settings.CHANNEL_URL_2),
         )
 
 
