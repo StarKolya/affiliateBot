@@ -14,6 +14,9 @@ class NicheRepository(BaseRepository[Niche]):
 class JobPostingRepository(BaseRepository[JobPosting]):
     model = JobPosting
 
+    async def get_active(self) -> List[JobPosting]:
+        return await JobPosting.filter(status="active")
+
     async def get_by_niche(self, niche_id: int) -> List[JobPosting]:
         return await JobPosting.filter(niche_id=niche_id, status="active")
 

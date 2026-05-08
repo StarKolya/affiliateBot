@@ -7,6 +7,9 @@ class Referral(Model):
     account: fields.ForeignKeyRelation = fields.ForeignKeyField(
         "models.Account", related_name="referrals", on_delete=fields.CASCADE
     )
+    job_posting: fields.ForeignKeyNullableRelation = fields.ForeignKeyField(
+        "models.JobPosting", related_name="referrals", on_delete=fields.SET_NULL, null=True
+    )
     name = fields.CharField(max_length=50)
     # Unique slug used in /start?ref=<code>
     code = fields.CharField(max_length=50, unique=True)

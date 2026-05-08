@@ -25,6 +25,8 @@ class CreateNicheStates(StatesGroup):
 
 class CreateReferralStates(StatesGroup):
     enter_name = State()
+    select_type = State()
+    select_job = State()
 
 
 class RequestPayoutStates(StatesGroup):

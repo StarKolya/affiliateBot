@@ -20,7 +20,9 @@ from bot.keyboards.user_kb import (
     payout_create_kb,
     payout_history_kb,
     payout_menu_kb,
+    referral_create_type_kb,
     referral_detail_kb,
+    referral_job_select_kb,
     referral_links_list_kb,
     referral_menu_kb,
     referral_stats_kb,
@@ -68,6 +70,22 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot) -> None:
     if not created:
         # Existing user — subscription already verified at registration, skip check
         logger.info("Returning user | telegram_id=%s", tg_user.id)
+        # If the link is bound to a job, redirect directly to that job posting
+        if referral_code:
+            referral = await referral_service.get_referral_by_code(referral_code)
+            if referral and referral.job_posting_id:
+                job = await job_service.get_job(referral.job_posting_id)
+                if job:
+                    await message.answer_photo(
+                        FSInputFile(_START_IMAGE),
+                        caption=f"<b>Добро пожаловать, {account.name}!</b>",
+                        reply_markup=main_menu_kb(),
+                    )
+                    await message.answer(
+                        _format_job(job),
+                        reply_markup=job_detail_kb(job.id, back_callback="browse_jobs"),
+                    )
+                    return
         await message.answer_photo(
             FSInputFile(_START_IMAGE),
             caption=f"<b>Добро пожаловать, {account.name}!\n\n"
@@ -86,6 +104,11 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot) -> None:
 
     if subscribed:
         await user_service.mark_subscription_verified(account)
+        bound_job = None
+        if referral_code:
+            referral = await referral_service.get_referral_by_code(referral_code)
+            if referral and referral.job_posting_id:
+                bound_job = await job_service.get_job(referral.job_posting_id)
         await message.answer_photo(
             FSInputFile(_START_IMAGE),
             caption=f"<b>Добро пожаловать, {account.name}!\n\n"
@@ -97,6 +120,11 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot) -> None:
             "🔹 Работа с инфлюенсерами</blockquote></b>",
             reply_markup=main_menu_kb(),
         )
+        if bound_job:
+            await message.answer(
+                _format_job(bound_job),
+                reply_markup=job_detail_kb(bound_job.id, back_callback="browse_jobs"),
+            )
     else:
         await message.answer(
             "Для использования бота необходимо подписаться на наш канал.\n"
@@ -467,17 +495,70 @@ async def fsm_referral_enter_name(message: Message, state: FSMContext) -> None:
         await message.answer("Слишком длинное название. Максимум 50 символов:")
         return
 
-    account = await user_service.get_by_telegram_id(message.from_user.id)
-    await state.clear()
-
-    referral = await referral_service.create_referral_link(account_id=account.id, name=name)
-    link = f"https://t.me/{settings.BOT_USERNAME}?start=ref={referral.code}"
+    await state.update_data(referral_name=name)
+    await state.set_state(CreateReferralStates.select_type)
     await message.answer(
+        "Выбери тип ссылки:\n\n"
+        "<b>🔗 Обычная</b> — пользователь попадает на главное меню бота\n"
+        "<b>💼 Привязать к вакансии</b> — пользователь сразу открывает конкретную вакансию",
+        reply_markup=referral_create_type_kb(),
+    )
+
+
+@router.callback_query(CreateReferralStates.select_type, F.data == "referral_type:free")
+async def callback_referral_type_free(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    await state.clear()
+    account = await user_service.get_by_telegram_id(callback.from_user.id)
+    referral = await referral_service.create_referral_link(account_id=account.id, name=data["referral_name"])
+    link = f"https://t.me/{settings.BOT_USERNAME}?start=ref={referral.code}"
+    await callback.message.edit_text(
         f"✅ <b>{referral.name}</b> создана!\n\n"
         f"<code>{link}</code>\n\n"
         "Делись ссылкой — получай комиссию с каждого нанятого реферала.",
         reply_markup=referral_menu_kb(),
     )
+    await callback.answer()
+
+
+@router.callback_query(CreateReferralStates.select_type, F.data == "referral_type:job")
+async def callback_referral_type_job(callback: CallbackQuery, state: FSMContext) -> None:
+    jobs = await job_service.list_active_jobs()
+    if not jobs:
+        await callback.answer("Нет доступных вакансий.", show_alert=True)
+        return
+    await state.set_state(CreateReferralStates.select_job)
+    await callback.message.edit_text(
+        "Выбери вакансию, к которой привязать ссылку:",
+        reply_markup=referral_job_select_kb(jobs),
+    )
+    await callback.answer()
+
+
+@router.callback_query(CreateReferralStates.select_job, F.data.startswith("referral_bind_job:"))
+async def callback_referral_bind_job(callback: CallbackQuery, state: FSMContext) -> None:
+    job_id = int(callback.data.split(":")[1])
+    data = await state.get_data()
+    await state.clear()
+    account = await user_service.get_by_telegram_id(callback.from_user.id)
+    job = await job_service.get_job(job_id)
+    if job is None:
+        await callback.answer("Вакансия больше недоступна.", show_alert=True)
+        return
+    referral = await referral_service.create_referral_link(
+        account_id=account.id,
+        name=data["referral_name"],
+        job_posting_id=job_id,
+    )
+    link = f"https://t.me/{settings.BOT_USERNAME}?start=ref={referral.code}"
+    await callback.message.edit_text(
+        f"✅ <b>{referral.name}</b> создана!\n"
+        f"📌 Привязана к: <b>{job.title}</b>\n\n"
+        f"<code>{link}</code>\n\n"
+        "Пользователь сразу попадёт на эту вакансию.",
+        reply_markup=referral_menu_kb(),
+    )
+    await callback.answer()
 
 
 # --- Payouts ---

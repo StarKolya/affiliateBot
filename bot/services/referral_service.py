@@ -51,12 +51,21 @@ class AccountReferralStats:
     total_earned: Decimal
 
 
-async def create_referral_link(account_id: int, name: str) -> Referral:
+async def create_referral_link(
+    account_id: int,
+    name: str,
+    job_posting_id: Optional[int] = None,
+) -> Referral:
     """Auto-generates a unique code and creates the referral link."""
     for _ in range(5):
         code = secrets.token_urlsafe(8)
         if not await referral_repo.code_exists(code):
-            return await referral_repo.create(account_id=account_id, name=name, code=code)
+            return await referral_repo.create(
+                account_id=account_id,
+                name=name,
+                code=code,
+                job_posting_id=job_posting_id,
+            )
     raise RuntimeError("Failed to generate a unique referral code after 5 attempts")
 
 

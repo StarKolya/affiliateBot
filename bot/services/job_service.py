@@ -21,6 +21,10 @@ async def list_active_niches() -> List[Niche]:
     return await niche_repo.get_active_niches()
 
 
+async def list_active_jobs() -> List[JobPosting]:
+    return await job_repo.get_active()
+
+
 async def list_jobs_by_niche(niche_id: int) -> List[JobPosting]:
     return await job_repo.get_by_niche(niche_id)
 

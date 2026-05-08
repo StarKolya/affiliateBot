@@ -1,5 +1,5 @@
 from decimal import Decimal
-from typing import Optional
+from typing import List, Optional
 
 from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
@@ -98,6 +98,24 @@ def referral_links_list_kb(links, page: int, total_pages: int, counts: dict | No
         row_sizes.append(len(nav))
     row_sizes.append(1)
     builder.adjust(*row_sizes)
+    return builder.as_markup()
+
+
+def referral_create_type_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🔗 Обычная ссылка", callback_data="referral_type:free")
+    builder.button(text="💼 Привязать к вакансии", callback_data="referral_type:job")
+    builder.button(text="❌ Отмена", callback_data="referral_links")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def referral_job_select_kb(jobs) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for job in jobs:
+        builder.button(text=job.title, callback_data=f"referral_bind_job:{job.id}")
+    builder.button(text="❌ Отмена", callback_data="referral_links")
+    builder.adjust(1)
     return builder.as_markup()
 
 
