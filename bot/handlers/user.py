@@ -30,7 +30,7 @@ from bot.keyboards.user_kb import (
 )
 from bot.services import application_service, job_service, payout_service, referral_service, user_service
 from bot.utils.logger import get_logger
-from bot.utils.telegram import is_channel_member
+from bot.utils.telegram import is_subscribed_to_all
 
 logger = get_logger(__name__)
 router = Router(name="user")
@@ -100,7 +100,8 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot) -> None:
         return
 
     # New user — perform the one-time channel subscription check
-    subscribed = await is_channel_member(bot, settings.CHANNEL_ID, tg_user.id)
+    channel_ids = [settings.CHANNEL_ID] + ([settings.CHANNEL_ID_2] if settings.CHANNEL_ID_2 else [])
+    subscribed = await is_subscribed_to_all(bot, channel_ids, tg_user.id)
 
     if subscribed:
         await user_service.mark_subscription_verified(account)
@@ -126,10 +127,11 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot) -> None:
                 reply_markup=job_detail_kb(bound_job.id, back_callback="browse_jobs"),
             )
     else:
-        await message.answer(
-            "Для использования бота необходимо подписаться на наш канал.\n"
+        await message.answer_photo(
+            FSInputFile(_START_IMAGE),
+            caption="Для использования бота необходимо подписаться на наш канал и вступить в группу.\n"
             "Подпишись и нажми кнопку ниже.",
-            reply_markup=subscription_check_kb(settings.CHANNEL_URL),
+            reply_markup=subscription_check_kb(settings.CHANNEL_URL, settings.CHANNEL_URL_2),
         )
 
 
@@ -152,7 +154,8 @@ async def callback_check_subscription(callback: CallbackQuery, bot: Bot) -> None
         await callback.answer()
         return
 
-    subscribed = await is_channel_member(bot, settings.CHANNEL_ID, tg_user.id)
+    channel_ids = [settings.CHANNEL_ID] + ([settings.CHANNEL_ID_2] if settings.CHANNEL_ID_2 else [])
+    subscribed = await is_subscribed_to_all(bot, channel_ids, tg_user.id)
 
     if subscribed:
         await user_service.mark_subscription_verified(account)
@@ -171,7 +174,7 @@ async def callback_check_subscription(callback: CallbackQuery, bot: Bot) -> None
         await callback.answer()
     else:
         await callback.answer(
-            "Ты ещё не подписан. Вступи в канал и попробуй снова.",
+            "Ты ещё не подписан на все каналы. Вступи и попробуй снова.",
             show_alert=True,
         )
 

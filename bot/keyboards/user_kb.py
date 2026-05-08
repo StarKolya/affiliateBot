@@ -5,14 +5,15 @@ from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
 
-def subscription_check_kb(channel_url: Optional[str] = None) -> InlineKeyboardMarkup:
-    """
-    Shown to new users who are not yet subscribed.
-    Optionally includes a direct channel link if CHANNEL_URL is configured.
-    """
+def subscription_check_kb(
+    channel_url: Optional[str] = None,
+    channel_url_2: Optional[str] = None,
+) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     if channel_url:
         builder.button(text="📢 Подписаться на канал", url=channel_url)
+    if channel_url_2:
+        builder.button(text="💬 Вступить в группу", url=channel_url_2)
     builder.button(text="✅ Я подписался", callback_data="check_subscription")
     builder.adjust(1)
     return builder.as_markup()

@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     CHANNEL_ID: int
     CHANNEL_URL: str | None = None
 
+    CHANNEL_ID_2: int | None = None
+    CHANNEL_URL_2: str | None = None
+
     BOT_USERNAME: str
 
     # Comma-separated telegram IDs bootstrapped as admins on first startup
