@@ -193,7 +193,7 @@ def question_select_kb(
 
 
 def applications_page_kb(
-    apps, page: int, total_pages: int, has_filters: bool, has_sort: bool
+    apps, page: int, total_pages: int, has_filters: bool, has_sort: bool, has_status_filter: bool = False
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for app in apps:
@@ -208,6 +208,8 @@ def applications_page_kb(
     nav.append((filter_label, "admin_apps_filters"))
     sort_label = "↕️ Сортировка ●" if has_sort else "↕️ Сортировка"
     nav.append((sort_label, "admin_apps_sort"))
+    status_label = "🏷 Статус ●" if has_status_filter else "🏷 Статус"
+    nav.append((status_label, "admin_apps_status_filter"))
     if page < total_pages - 1:
         nav.append(("Вперёд ▶️", "admin_apps_next"))
 
@@ -215,6 +217,18 @@ def applications_page_kb(
         builder.button(text=text, callback_data=cb)
 
     builder.adjust(*([1] * len(apps)), len(nav))
+    return builder.as_markup()
+
+
+def application_status_filter_kb(active_statuses: list) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for status, label in _STATUS_DISPLAY_RU.items():
+        prefix = "✅ " if status in active_statuses else ""
+        builder.button(text=f"{prefix}{label}", callback_data=f"admin_status_toggle:{status}")
+    if active_statuses:
+        builder.button(text="🗑 Сбросить", callback_data="admin_status_filter_clear")
+    builder.button(text="⬅️ К откликам", callback_data="admin_apps_back")
+    builder.adjust(1)
     return builder.as_markup()
 
 

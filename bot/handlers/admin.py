@@ -19,6 +19,7 @@ from bot.keyboards.admin_kb import (
     admin_niche_select_kb,
     application_filter_kb,
     application_sort_kb,
+    application_status_filter_kb,
     application_status_kb,
     applications_page_kb,
     finance_list_kb,
@@ -330,6 +331,7 @@ async def _init_browse(
         numeric_questions=numeric_questions,
         page=0,
         filters={},
+        status_filter=[],
     )
     await _render_applications_page(callback.message, await state.get_data())
 
@@ -470,6 +472,44 @@ async def callback_sort_clear(callback: CallbackQuery, state: FSMContext) -> Non
     await callback.answer()
 
 
+# --- Status filter ---
+
+@router.callback_query(F.data == "admin_apps_status_filter")
+async def callback_show_status_filter(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    await callback.message.edit_text(
+        "Фильтр по статусу:",
+        reply_markup=application_status_filter_kb(data.get("status_filter", [])),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_status_toggle:"))
+async def callback_status_toggle(callback: CallbackQuery, state: FSMContext) -> None:
+    status = callback.data.split(":", 1)[1]
+    data = await state.get_data()
+    active = list(data.get("status_filter", []))
+    if status in active:
+        active.remove(status)
+    else:
+        active.append(status)
+    await state.update_data(status_filter=active, page=0)
+    await callback.message.edit_reply_markup(
+        reply_markup=application_status_filter_kb(active)
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_status_filter_clear")
+async def callback_status_filter_clear(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.update_data(status_filter=[], page=0)
+    await callback.message.edit_text(
+        "Фильтр по статусу:",
+        reply_markup=application_status_filter_kb([]),
+    )
+    await callback.answer()
+
+
 # --- Shared render ---
 
 async def _render_applications_page(target: Message, data: dict) -> None:
@@ -479,12 +519,16 @@ async def _render_applications_page(target: Message, data: dict) -> None:
     filters = {int(k): v for k, v in data.get("filters", {}).items()}
     sort_by = data.get("sort_by")
     ascending = data.get("sort_ascending", True)
+    status_filter = data.get("status_filter", [])
 
     if job_id is not None:
         applications = await application_service.list_applications_by_job(job_id)
         applications = application_service.apply_numeric_filters(applications, filters)
     else:
         applications = await application_service.list_applications_by_niche(niche_id)
+
+    if status_filter:
+        applications = [a for a in applications if a.status.name in status_filter]
 
     if sort_by:
         applications = application_service.apply_sort(applications, sort_by, ascending)
@@ -500,7 +544,8 @@ async def _render_applications_page(target: Message, data: dict) -> None:
     await target.edit_text(
         f"Отклики (стр. {page + 1}/{total_pages}):",
         reply_markup=applications_page_kb(
-            page_apps, page, total_pages, has_filters=bool(filters), has_sort=bool(sort_by)
+            page_apps, page, total_pages,
+            has_filters=bool(filters), has_sort=bool(sort_by), has_status_filter=bool(status_filter)
         ),
     )
 
