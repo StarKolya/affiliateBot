@@ -11,10 +11,10 @@ def subscription_check_kb(
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     if channel_url:
-        builder.button(text="📢 Подписаться на канал", url=channel_url)
+        builder.button(text="🔷 Подписаться 1", url=channel_url)
     if channel_url_2:
-        builder.button(text="💬 Вступить в группу", url=channel_url_2)
-    builder.button(text="✅ Я подписался", callback_data="check_subscription")
+        builder.button(text="🔷 Подписаться 2", url=channel_url_2)
+    builder.button(text="✅ Проверить", callback_data="check_subscription")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -74,7 +74,7 @@ def referral_menu_kb() -> InlineKeyboardMarkup:
 
 def referral_stats_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="💼 Финансы", callback_data="payout_menu")
+    builder.button(text="💰 Финансы", callback_data="payout_menu")
     builder.button(text="⬅️ Назад", callback_data="referral_menu")
     builder.adjust(1)
     return builder.as_markup()

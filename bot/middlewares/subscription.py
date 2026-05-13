@@ -12,7 +12,7 @@ from bot.utils.telegram import is_subscribed_to_all
 
 logger = get_logger(__name__)
 
-_SUBSCRIBE_IMAGE = Path(__file__).parent.parent / "images" / "start.jpg"
+_SUBSCRIBE_IMAGE = Path(__file__).parent.parent / "images" / "subscribed.jpg"
 
 # How long (seconds) to trust a positive membership result before re-checking.
 _CACHE_TTL = 300  # 5 minutes
@@ -39,10 +39,8 @@ def _channel_ids() -> list[int]:
     return ids
 
 
-_SUBSCRIBE_CAPTION = (
-    "Для использования бота необходимо подписаться на наш канал и вступить в группу.\n"
-    "Подпишись и нажми кнопку ниже."
-)
+def _subscribe_caption(name: str) -> str:
+    return f"🫵 Приветствую, {name}!\nПожалуйста, подпишитесь на канал(ы), чтобы использовать Jobs Network!"
 
 # Updates that drive the subscription flow itself — let them through unconditionally.
 _EXEMPT_CALLBACKS = {"check_subscription"}
@@ -103,7 +101,7 @@ class SubscriptionMiddleware(BaseMiddleware):
         if isinstance(event, Message):
             await event.answer_photo(
                 FSInputFile(_SUBSCRIBE_IMAGE),
-                caption=_SUBSCRIBE_CAPTION,
+                caption=_subscribe_caption(user.first_name),
                 reply_markup=kb,
             )
         elif isinstance(event, CallbackQuery):
@@ -111,9 +109,8 @@ class SubscriptionMiddleware(BaseMiddleware):
                 "Ты отписался. Подпишись снова, чтобы продолжить.",
                 show_alert=True,
             )
-            # Also send the photo prompt so the user sees the buttons
             await event.message.answer_photo(
                 FSInputFile(_SUBSCRIBE_IMAGE),
-                caption=_SUBSCRIBE_CAPTION,
+                caption=_subscribe_caption(user.first_name),
                 reply_markup=kb,
             )

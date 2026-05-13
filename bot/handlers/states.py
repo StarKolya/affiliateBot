@@ -31,3 +31,7 @@ class CreateReferralStates(StatesGroup):
 
 class RequestPayoutStates(StatesGroup):
     enter_amount = State()
+
+
+class AdminPayStates(StatesGroup):
+    enter_amount = State()

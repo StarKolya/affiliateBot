@@ -70,3 +70,13 @@ async def list_pending_payouts() -> List[PayoutRequest]:
 
 async def list_user_payouts(account_id: int) -> List[PayoutRequest]:
     return await payout_repo.get_by_account(account_id)
+
+
+async def admin_pay_account(account_id: int, amount: Decimal) -> PayoutRequest:
+    if amount <= 0:
+        raise ValueError("Amount must be greater than zero")
+    payout = await payout_repo.create(account_id=account_id, amount=amount)
+    payout.status = "approved"
+    await payout.save(update_fields=["status", "updated_at"])
+    logger.info("Admin payout created | account=%s amount=%s", account_id, amount)
+    return payout

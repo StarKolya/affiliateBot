@@ -3,26 +3,40 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
 JOB_TYPES = ("partnership", "offer")
 
+# DB values — do not translate. Used in callback_data and status comparisons.
 STATUSES_BY_TYPE: dict[str, tuple] = {
     "partnership": ("Pending", "Declined", "Deal Closed"),
     "offer": ("Pending", "Declined", "Joined Team", "Bought Course"),
 }
 
+_STATUS_DISPLAY_RU = {
+    "Pending": "На рассмотрении",
+    "Declined": "Отклонено",
+    "Deal Closed": "Сделка закрыта",
+    "Joined Team": "Вступил в команду",
+    "Bought Course": "Купил курс",
+}
+
+_JOB_TYPE_RU = {
+    "partnership": "Партнёрство",
+    "offer": "Оффер",
+}
+
 
 def admin_menu_kb() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
-    builder.button(text="📋 Applications")
-    builder.button(text="💼 Jobs")
-    builder.button(text="🏷 Niches")
-    builder.button(text="🔗 Referrals")
+    builder.button(text="📋 Отклики")
+    builder.button(text="💼 Вакансии")
+    builder.button(text="🏷 Ниши")
+    builder.button(text="🔗 Рефералы")
     builder.adjust(2)
     return builder.as_markup(resize_keyboard=True)
 
 
 def jobs_menu_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="➕ Create Job", callback_data="admin_create_job")
-    builder.button(text="📋 Manage Jobs", callback_data="admin_manage_jobs")
+    builder.button(text="➕ Создать вакансию", callback_data="admin_create_job")
+    builder.button(text="📋 Управление вакансиями", callback_data="admin_manage_jobs")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -31,23 +45,23 @@ def niches_manage_kb(niches) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for niche in niches:
         builder.button(text=niche.name, callback_data=f"admin_niche_detail:{niche.id}")
-    builder.button(text="➕ Create Niche", callback_data="admin_create_niche")
+    builder.button(text="➕ Добавить нишу", callback_data="admin_create_niche")
     builder.adjust(1)
     return builder.as_markup()
 
 
 def niche_detail_kb(niche_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="🗑 Delete Niche", callback_data=f"admin_niche_delete:{niche_id}")
-    builder.button(text="⬅️ Back", callback_data="admin_niches_menu")
+    builder.button(text="🗑 Удалить нишу", callback_data=f"admin_niche_delete:{niche_id}")
+    builder.button(text="⬅️ Назад", callback_data="admin_niches_menu")
     builder.adjust(1)
     return builder.as_markup()
 
 
 def niche_delete_confirm_kb(niche_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="✅ Yes, delete", callback_data=f"admin_niche_delete_confirm:{niche_id}")
-    builder.button(text="❌ Cancel", callback_data=f"admin_niche_detail:{niche_id}")
+    builder.button(text="✅ Да, удалить", callback_data=f"admin_niche_delete_confirm:{niche_id}")
+    builder.button(text="❌ Отмена", callback_data=f"admin_niche_detail:{niche_id}")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -56,7 +70,7 @@ def jobs_manage_niche_kb(niches) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for niche in niches:
         builder.button(text=niche.name, callback_data=f"admin_manage_jobs_niche:{niche.id}")
-    builder.button(text="⬅️ Back", callback_data="admin_jobs_menu")
+    builder.button(text="⬅️ Назад", callback_data="admin_jobs_menu")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -69,7 +83,7 @@ def jobs_manage_list_kb(jobs, niche_id: int) -> InlineKeyboardMarkup:
     for job in jobs:
         icon = _STATUS_ICON.get(job.status, "⚪")
         builder.button(text=f"{icon} {job.title}", callback_data=f"admin_manage_job:{job.id}:{niche_id}")
-    builder.button(text="⬅️ Back", callback_data="admin_manage_jobs")
+    builder.button(text="⬅️ Назад", callback_data="admin_manage_jobs")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -77,10 +91,10 @@ def jobs_manage_list_kb(jobs, niche_id: int) -> InlineKeyboardMarkup:
 def job_manage_detail_kb(job_id: int, status: str, niche_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     if status == "active":
-        builder.button(text="⏸ Pause", callback_data=f"admin_job_toggle:{job_id}:{niche_id}")
+        builder.button(text="⏸ Приостановить", callback_data=f"admin_job_toggle:{job_id}:{niche_id}")
     else:
-        builder.button(text="▶️ Enable", callback_data=f"admin_job_toggle:{job_id}:{niche_id}")
-    builder.button(text="⬅️ Back", callback_data=f"admin_manage_jobs_niche:{niche_id}")
+        builder.button(text="▶️ Активировать", callback_data=f"admin_job_toggle:{job_id}:{niche_id}")
+    builder.button(text="⬅️ Назад", callback_data=f"admin_manage_jobs_niche:{niche_id}")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -89,7 +103,7 @@ def admin_niche_select_kb(niches) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for niche in niches:
         builder.button(text=niche.name, callback_data=f"admin_niche:{niche.id}")
-    builder.button(text="❌ Cancel", callback_data="admin_cancel")
+    builder.button(text="❌ Отмена", callback_data="admin_cancel")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -97,15 +111,15 @@ def admin_niche_select_kb(niches) -> InlineKeyboardMarkup:
 def job_type_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for job_type in JOB_TYPES:
-        builder.button(text=job_type.capitalize(), callback_data=f"admin_job_type:{job_type}")
-    builder.button(text="❌ Cancel", callback_data="admin_cancel")
+        builder.button(text=_JOB_TYPE_RU.get(job_type, job_type.capitalize()), callback_data=f"admin_job_type:{job_type}")
+    builder.button(text="❌ Отмена", callback_data="admin_cancel")
     builder.adjust(1)
     return builder.as_markup()
 
 
 def skip_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="⏭ Skip", callback_data="admin_skip")
+    builder.button(text="⏭ Пропустить", callback_data="admin_skip")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -132,7 +146,7 @@ def question_select_kb(
     for text, cb in nav:
         builder.button(text=text, callback_data=cb)
 
-    builder.button(text="Confirm", callback_data="admin_q_confirm")
+    builder.button(text="✅ Подтвердить", callback_data="admin_q_confirm")
 
     rows = [1] * len(questions)
     if nav:
@@ -145,16 +159,17 @@ def question_select_kb(
 def applications_page_kb(apps, page: int, total_pages: int, has_filters: bool) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for app in apps:
-        label = f"{app.account.name} — {app.job_posting.title} ({app.status.name})"
+        status_ru = _STATUS_DISPLAY_RU.get(app.status.name, app.status.name)
+        label = f"{app.account.name} — {app.job_posting.title} ({status_ru})"
         builder.button(text=label, callback_data=f"admin_app:{app.id}")
 
     nav = []
     if page > 0:
-        nav.append(("◀️ Prev", "admin_apps_prev"))
-    filter_label = "🔍 Filters ●" if has_filters else "🔍 Filters"
+        nav.append(("◀️ Назад", "admin_apps_prev"))
+    filter_label = "🔍 Фильтры ●" if has_filters else "🔍 Фильтры"
     nav.append((filter_label, "admin_apps_filters"))
     if page < total_pages - 1:
-        nav.append(("▶️ Next", "admin_apps_next"))
+        nav.append(("Вперёд ▶️", "admin_apps_next"))
 
     for text, cb in nav:
         builder.button(text=text, callback_data=cb)
@@ -169,11 +184,11 @@ def application_filter_kb(numeric_questions: list, active_filters: dict) -> Inli
         jq_id = str(q["jq_id"])
         label = q["text"]
         if jq_id in active_filters:
-            label = f"✅ {label} (min: {active_filters[jq_id]:.0f})"
+            label = f"✅ {label} (мин: {active_filters[jq_id]:.0f})"
         builder.button(text=label, callback_data=f"admin_filter_set:{q['jq_id']}")
     if active_filters:
-        builder.button(text="🗑 Clear all filters", callback_data="admin_filter_clear")
-    builder.button(text="⬅️ Back to applications", callback_data="admin_apps_back")
+        builder.button(text="🗑 Сбросить фильтры", callback_data="admin_filter_clear")
+    builder.button(text="⬅️ К откликам", callback_data="admin_apps_back")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -182,11 +197,12 @@ def application_status_kb(application_id: int, current_status: str, job_type: st
     builder = InlineKeyboardBuilder()
     statuses = STATUSES_BY_TYPE.get(job_type, ("Pending", "Declined"))
     for status in statuses:
+        display = _STATUS_DISPLAY_RU.get(status, status)
         if status == current_status:
-            builder.button(text=f"✅ {status}", callback_data="app_status_noop")
+            builder.button(text=f"✅ {display}", callback_data="app_status_noop")
         else:
-            builder.button(text=status, callback_data=f"app_status:{application_id}:{status}")
-    builder.button(text="⬅️ Back", callback_data="admin_list_applications")
+            builder.button(text=display, callback_data=f"app_status:{application_id}:{status}")
+    builder.button(text="⬅️ Назад", callback_data="admin_list_applications")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -197,8 +213,8 @@ FINANCE_PAGE_SIZE = 8
 
 def referrals_menu_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="👥 All Referrers", callback_data="admin_all_referrers")
-    builder.button(text="💰 Finance", callback_data="admin_finance")
+    builder.button(text="👥 Все рефереры", callback_data="admin_all_referrers")
+    builder.button(text="💰 Финансы", callback_data="admin_finance")
     builder.adjust(2)
     return builder.as_markup()
 
@@ -217,7 +233,7 @@ def referrers_list_kb(accounts, page: int, total_pages: int) -> InlineKeyboardMa
         nav.append(("▶️", f"admin_referrers_page:{page + 1}"))
     for text, cb in nav:
         builder.button(text=text, callback_data=cb)
-    builder.button(text="⬅️ Back", callback_data="admin_referrals_menu")
+    builder.button(text="⬅️ Назад", callback_data="admin_referrals_menu")
     rows = [1] * len(accounts)
     if nav:
         rows.append(len(nav))
@@ -226,9 +242,10 @@ def referrers_list_kb(accounts, page: int, total_pages: int) -> InlineKeyboardMa
     return builder.as_markup()
 
 
-def referrer_detail_kb() -> InlineKeyboardMarkup:
+def referrer_detail_kb(account_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="⬅️ Back", callback_data="admin_all_referrers")
+    builder.button(text="💳 Выплатить", callback_data=f"admin_pay_user:{account_id}")
+    builder.button(text="⬅️ Назад", callback_data="admin_all_referrers")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -245,7 +262,7 @@ def finance_list_kb(payouts, page: int, total_pages: int) -> InlineKeyboardMarku
         nav.append(("▶️", f"admin_finance_page:{page + 1}"))
     for text, cb in nav:
         builder.button(text=text, callback_data=cb)
-    builder.button(text="⬅️ Back", callback_data="admin_referrals_menu")
+    builder.button(text="⬅️ Назад", callback_data="admin_referrals_menu")
     rows = [1] * len(payouts)
     if nav:
         rows.append(len(nav))
@@ -256,8 +273,8 @@ def finance_list_kb(payouts, page: int, total_pages: int) -> InlineKeyboardMarku
 
 def payout_action_kb(payout_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="✅ Paid", callback_data=f"admin_payout_approve:{payout_id}")
-    builder.button(text="❌ Rejected", callback_data=f"admin_payout_reject:{payout_id}")
-    builder.button(text="⬅️ Back", callback_data="admin_finance")
+    builder.button(text="✅ Оплачено", callback_data=f"admin_payout_approve:{payout_id}")
+    builder.button(text="❌ Отклонить", callback_data=f"admin_payout_reject:{payout_id}")
+    builder.button(text="⬅️ Назад", callback_data="admin_finance")
     builder.adjust(2, 1)
     return builder.as_markup()

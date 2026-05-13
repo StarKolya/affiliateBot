@@ -2,6 +2,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, FSInputFile, InputMediaPhoto, Message
@@ -36,6 +37,7 @@ logger = get_logger(__name__)
 router = Router(name="user")
 
 _START_IMAGE = Path(__file__).parent.parent / "images" / "start.jpg"
+_SUBSCRIBED_IMAGE = Path(__file__).parent.parent / "images" / "subscribed.jpg"
 _NICHE_IMAGE = Path(__file__).parent.parent / "images" / "niche.jpg"
 _OFFER_IMAGE = Path(__file__).parent.parent / "images" / "offer.jpg"
 _REFERRAL_IMAGE = Path(__file__).parent.parent / "images" / "referral.jpg"
@@ -72,9 +74,9 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot) -> None:
 
     if not subscribed:
         await message.answer_photo(
-            FSInputFile(_START_IMAGE),
-            caption="Для использования бота необходимо подписаться на наш канал и вступить в группу.\n"
-            "Подпишись и нажми кнопку ниже.",
+            FSInputFile(_SUBSCRIBED_IMAGE),
+            caption=f"🫵 Приветствую, {tg_user.first_name}!\n"
+            "Пожалуйста, подпишитесь на канал(ы), чтобы использовать Jobs Network!",
             reply_markup=subscription_check_kb(settings.CHANNEL_URL, settings.CHANNEL_URL_2),
         )
         return
@@ -142,11 +144,15 @@ async def callback_check_subscription(callback: CallbackQuery, bot: Bot) -> None
             reply_markup=main_menu_kb(),
         )
     else:
-        await callback.message.edit_caption(
-            caption="❌ Ты ещё не подписался на все каналы.\n\n"
-            "Подпишись и нажми кнопку снова.",
-            reply_markup=subscription_check_kb(settings.CHANNEL_URL, settings.CHANNEL_URL_2),
-        )
+        try:
+            await callback.message.edit_caption(
+                caption=f"❌ Вы ещё не подписались!\n\n"
+                f"🫵 Приветствую, {account.name}!\n"
+                "Пожалуйста, подпишитесь на канал(ы), чтобы использовать Jobs Network!",
+                reply_markup=subscription_check_kb(settings.CHANNEL_URL, settings.CHANNEL_URL_2),
+            )
+        except TelegramBadRequest:
+            pass  # message already shows this text — nothing to update
 
 
 @router.message(F.text == "📋 Вакансии")
@@ -365,15 +371,14 @@ async def callback_referral_stats(callback: CallbackQuery) -> None:
         InputMediaPhoto(
             media=FSInputFile(_STATS_IMAGE),
             caption=(
-                f"<b><blockquote>📊 Статистика</blockquote>\n\n"
-                f"👥 Привлечено пользователей: {stats.total_referred}\n"
-                f"📝 Всего заявок: {stats.total_applications}\n"
-                f"  ⏳ На рассмотрении: {stats.total_pending}\n"
-                f"  ❌ Отклонено: {stats.total_declined}\n"
-                f"  🤝 Сделка закрыта: {stats.total_deal_closed}\n"
-                f"  ✅ Вступил в команду: {stats.total_joined_team}\n"
-                f"  📚 Купил курс: {stats.total_bought_course}\n\n"
-                f"💰 Всего заработано: ${stats.total_earned:.2f}</b>"
+                f"<b>"
+                f"👥 Активации: {stats.total_referred}\n"
+                f"📝 Отклики: {stats.total_applications}\n"
+                f"⌛️ В обработке: {stats.total_pending}\n"
+                f"🪫 Отклонено: {stats.total_declined}\n"
+                f"✅ Принято: {stats.total_joined_team}\n"
+                f"📚 Обучение: {stats.total_bought_course}\n\n"
+                f"💰 Доход: ${stats.total_earned:.2f}</b>"
             ),
         ),
         reply_markup=referral_stats_kb(),
@@ -437,14 +442,13 @@ async def callback_referral_detail(callback: CallbackQuery) -> None:
     await callback.message.delete()
     await callback.message.answer(
         f"<b><blockquote>🔗 {referral.name}</blockquote>\n\n"
-        f"👥 Привлечено: {stats.referred_users}\n"
-        f"📝 Заявок: {stats.applications}\n"
-        f"  ⏳ На рассмотрении: {stats.pending}\n"
-        f"  ❌ Отклонено: {stats.declined}\n"
-        f"  🤝 Сделка закрыта: {stats.deal_closed}\n"
-        f"  ✅ Вступил в команду: {stats.joined_team}\n"
-        f"  📚 Купил курс: {stats.bought_course}\n\n"
-        f"💰 Заработано: ${stats.earned:.2f}\n\n"
+        f"👥 Активации: {stats.referred_users}\n"
+        f"📝 Отклики: {stats.applications}\n"
+        f"⌛️ В обработке: {stats.pending}\n"
+        f"🪫 Отклонено: {stats.declined}\n"
+        f"✅ Принято: {stats.joined_team}\n"
+        f"📚 Обучение: {stats.bought_course}\n\n"
+        f"💰 Доход: ${stats.earned:.2f}\n\n"
         f"<code>{link}</code>",
         reply_markup=referral_detail_kb(),
     )
