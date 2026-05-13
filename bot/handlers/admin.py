@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.filters import IsAdmin
-from bot.handlers.states import AdminPayStates, CreateJobStates, CreateNicheStates, CreateQuestionStates, FilterApplicationsStates
+from bot.handlers.states import AdminPayStates, CreateJobStates, CreateNicheStates, CreateQuestionStates, FilterApplicationsStates, ManageAdminStates
 from bot.keyboards.admin_kb import (
     APPS_PAGE_SIZE,
     FINANCE_PAGE_SIZE,
@@ -15,8 +15,11 @@ from bot.keyboards.admin_kb import (
     REFERRERS_PAGE_SIZE,
     _STATUS_DISPLAY_RU,
     _JOB_TYPE_RU,
+    _SUPERADMIN_ROLES,
+    admin_manage_admins_kb,
     admin_menu_kb,
     admin_niche_select_kb,
+    admin_role_select_kb,
     application_filter_kb,
     application_sort_kb,
     application_status_filter_kb,
@@ -43,7 +46,7 @@ from bot.keyboards.admin_kb import (
     skip_kb,
 )
 from bot.services import application_service, job_service, payout_service, referral_service
-from bot.models.account import Account
+from bot.models.account import Account, Role
 from bot.models.referral import Referral
 from bot.utils.logger import get_logger
 
@@ -56,15 +59,23 @@ router.callback_query.filter(IsAdmin())
 _STATUS_LABEL = {"active": "🟢 Активна", "paused": "🟡 Приостановлена", "closed": "🔴 Закрыта"}
 
 
+async def _get_role(telegram_id: int) -> str:
+    account = await Account.get_or_none(telegram_id=telegram_id).prefetch_related("role")
+    return account.role.name if account else "user"
+
+
 @router.message(Command("admin"))
 async def cmd_admin(message: Message) -> None:
-    await message.answer("Добро пожаловать в панель администратора.", reply_markup=admin_menu_kb())
+    role = await _get_role(message.from_user.id)
+    await message.answer("Добро пожаловать в панель администратора.", reply_markup=admin_menu_kb(role))
 
 
 # --- Job management ---
 
 @router.message(F.text == "💼 Вакансии")
 async def cmd_jobs_menu(message: Message) -> None:
+    if await _get_role(message.from_user.id) not in _SUPERADMIN_ROLES:
+        return
     await message.answer("Управление вакансиями:", reply_markup=jobs_menu_kb())
 
 
@@ -706,6 +717,8 @@ async def callback_job_toggle_status(callback: CallbackQuery) -> None:
 
 @router.message(F.text == "🏷 Ниши")
 async def cmd_niches_menu(message: Message) -> None:
+    if await _get_role(message.from_user.id) not in _SUPERADMIN_ROLES:
+        return
     niches = await job_service.list_all_niches()
     await message.answer("Управление нишами:", reply_markup=niches_manage_kb(niches))
 
@@ -773,6 +786,8 @@ async def callback_niche_delete_confirm(callback: CallbackQuery) -> None:
 
 @router.message(F.text == "🔗 Рефералы")
 async def cmd_referrals_menu(message: Message) -> None:
+    if await _get_role(message.from_user.id) not in (*_SUPERADMIN_ROLES, "admin_refs"):
+        return
     overview = await referral_service.get_admin_overview()
     await message.answer(
         f"🔗 <b>Реферальная сводка</b>\n\n"
@@ -928,10 +943,12 @@ async def callback_payout_detail(callback: CallbackQuery) -> None:
         await callback.answer("Запрос не найден или уже обработан.", show_alert=True)
         return
     tag = f"@{payout.account.username}" if payout.account.username else payout.account.name
+    wallet_line = f"\n💳 Кошелёк: <code>{payout.wallet_address}</code>" if payout.wallet_address else ""
     await callback.message.edit_text(
         f"💰 <b>Запрос на выплату</b>\n\n"
         f"👤 {tag}\n"
-        f"💵 Сумма: ${payout.amount:.2f}",
+        f"💵 Сумма: ${payout.amount:.2f}"
+        f"{wallet_line}",
         reply_markup=payout_action_kb(payout_id),
     )
     await callback.answer()
@@ -960,6 +977,8 @@ _ANSWER_TYPE_RU = {"text": "Текст", "number": "Число", "yes_no": "Да
 
 @router.message(F.text == "❓ Вопросы")
 async def cmd_questions_menu(message: Message) -> None:
+    if await _get_role(message.from_user.id) not in _SUPERADMIN_ROLES:
+        return
     await _show_questions_list(message)
 
 
@@ -1063,3 +1082,118 @@ async def fsm_question_answer_type(callback: CallbackQuery, state: FSMContext) -
     type_ru = _ANSWER_TYPE_RU.get(answer_type, answer_type)
     await _render_questions_list(callback.message, page=0, edit=True)
     await callback.answer(f"✅ Вопрос {q.title} добавлен (тип: {type_ru}).")
+
+
+# --- Admin management (superadmin only) ---
+
+_ROLE_DISPLAY = {
+    "superadmin": "👑 Суперадмин",
+    "admin": "👑 Суперадмин (legacy)",
+    "admin_refs": "🔗 Отклики + Рефералы",
+    "admin_apps": "📋 Только отклики",
+    "user": "👤 Пользователь",
+}
+
+from bot.filters.is_admin import ADMIN_ROLES
+
+
+async def _show_admins_list(target: Message, edit: bool = True) -> None:
+    admins = await Account.filter(role__name__in=list(ADMIN_ROLES)).prefetch_related("role").order_by("name")
+    text = "👑 <b>Управление администраторами</b>"
+    kb = admin_manage_admins_kb(admins)
+    if edit:
+        await target.edit_text(text, reply_markup=kb)
+    else:
+        await target.answer(text, reply_markup=kb)
+
+
+@router.message(F.text == "👑 Управление")
+async def cmd_manage_admins(message: Message) -> None:
+    if await _get_role(message.from_user.id) not in _SUPERADMIN_ROLES:
+        return
+    await _show_admins_list(message, edit=False)
+
+
+@router.callback_query(F.data == "mgmt_list")
+async def callback_mgmt_list(callback: CallbackQuery) -> None:
+    if await _get_role(callback.from_user.id) not in _SUPERADMIN_ROLES:
+        await callback.answer("Нет доступа.", show_alert=True)
+        return
+    await _show_admins_list(callback.message)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("mgmt_admin:"))
+async def callback_mgmt_admin_detail(callback: CallbackQuery) -> None:
+    if await _get_role(callback.from_user.id) not in _SUPERADMIN_ROLES:
+        await callback.answer("Нет доступа.", show_alert=True)
+        return
+    account_id = int(callback.data.split(":")[1])
+    account = await Account.get_or_none(id=account_id).prefetch_related("role")
+    if account is None:
+        await callback.answer("Пользователь не найден.", show_alert=True)
+        return
+    tag = f"@{account.username}" if account.username else account.name
+    role_label = _ROLE_DISPLAY.get(account.role.name, account.role.name)
+    await callback.message.edit_text(
+        f"👤 <b>{tag}</b>\nТекущая роль: {role_label}\n\nВыберите новую роль:",
+        reply_markup=admin_role_select_kb(account_id),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "mgmt_add_admin")
+async def callback_mgmt_add_admin(callback: CallbackQuery, state: FSMContext) -> None:
+    if await _get_role(callback.from_user.id) not in _SUPERADMIN_ROLES:
+        await callback.answer("Нет доступа.", show_alert=True)
+        return
+    await state.set_state(ManageAdminStates.enter_user)
+    await callback.message.edit_text(
+        "Введите <b>Telegram ID</b> или <b>@username</b> пользователя:"
+    )
+    await callback.answer()
+
+
+@router.message(ManageAdminStates.enter_user)
+async def fsm_mgmt_enter_user(message: Message, state: FSMContext) -> None:
+    text = message.text.strip()
+    account = None
+    if text.startswith("@"):
+        account = await Account.get_or_none(username=text[1:]).prefetch_related("role")
+    elif text.isdigit():
+        account = await Account.get_or_none(telegram_id=int(text)).prefetch_related("role")
+
+    if account is None:
+        await message.answer("Пользователь не найден. Попробуйте ещё раз:")
+        return
+
+    await state.clear()
+    tag = f"@{account.username}" if account.username else account.name
+    role_label = _ROLE_DISPLAY.get(account.role.name, account.role.name)
+    await message.answer(
+        f"👤 <b>{tag}</b>\nТекущая роль: {role_label}\n\nВыберите новую роль:",
+        reply_markup=admin_role_select_kb(account.id),
+    )
+
+
+@router.callback_query(F.data.startswith("mgmt_set_role:"))
+async def callback_mgmt_set_role(callback: CallbackQuery) -> None:
+    if await _get_role(callback.from_user.id) not in _SUPERADMIN_ROLES:
+        await callback.answer("Нет доступа.", show_alert=True)
+        return
+    _, account_id_str, role_key = callback.data.split(":")
+    account_id = int(account_id_str)
+    role = await Role.get_or_none(name=role_key)
+    if role is None:
+        await callback.answer("Роль не найдена.", show_alert=True)
+        return
+    account = await Account.get_or_none(id=account_id)
+    if account is None:
+        await callback.answer("Пользователь не найден.", show_alert=True)
+        return
+    account.role_id = role.id
+    await account.save(update_fields=["role_id"])
+    tag = f"@{account.username}" if account.username else account.name
+    role_label = _ROLE_DISPLAY.get(role_key, role_key)
+    await callback.answer(f"✅ {tag} → {role_label}", show_alert=True)
+    await _show_admins_list(callback.message)

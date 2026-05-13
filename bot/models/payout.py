@@ -8,6 +8,7 @@ class PayoutRequest(Model):
         "models.Account", related_name="payout_requests", on_delete=fields.CASCADE
     )
     amount = fields.DecimalField(max_digits=10, decimal_places=2)
+    wallet_address = fields.CharField(max_length=100, null=True)
     # "pending" | "approved" | "rejected"
     status = fields.CharField(max_length=15, default="pending")
     admin_note = fields.CharField(max_length=500, null=True)

@@ -31,10 +31,16 @@ class CreateReferralStates(StatesGroup):
 
 class RequestPayoutStates(StatesGroup):
     enter_amount = State()
+    enter_wallet = State()
 
 
 class AdminPayStates(StatesGroup):
     enter_amount = State()
+
+
+class ManageAdminStates(StatesGroup):
+    enter_user = State()
+    select_role = State()
 
 
 class CreateQuestionStates(StatesGroup):

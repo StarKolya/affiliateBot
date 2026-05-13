@@ -36,13 +36,13 @@ async def get_user_summary(account_id: int) -> PayoutSummary:
     )
 
 
-async def request_payout(account_id: int, amount: Decimal) -> PayoutRequest:
+async def request_payout(account_id: int, amount: Decimal, wallet_address: str) -> PayoutRequest:
     if amount <= 0:
         raise ValueError("Amount must be greater than zero")
     if await payout_repo.has_pending(account_id):
         raise ValueError("У вас уже есть активный запрос на выплату")
-    payout = await payout_repo.create(account_id=account_id, amount=amount)
-    logger.info("Payout request created | account=%s amount=%s", account_id, amount)
+    payout = await payout_repo.create(account_id=account_id, amount=amount, wallet_address=wallet_address)
+    logger.info("Payout request created | account=%s amount=%s wallet=%s", account_id, amount, wallet_address)
     return payout
 
 

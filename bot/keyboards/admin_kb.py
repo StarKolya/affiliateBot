@@ -23,15 +23,48 @@ _JOB_TYPE_RU = {
 }
 
 
-def admin_menu_kb() -> ReplyKeyboardMarkup:
+_SUPERADMIN_ROLES = {"superadmin", "admin"}
+
+
+def admin_menu_kb(role: str = "admin") -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     builder.button(text="📋 Отклики")
-    builder.button(text="💼 Вакансии")
-    builder.button(text="🏷 Ниши")
-    builder.button(text="🔗 Рефералы")
-    builder.button(text="❓ Вопросы")
+    if role in ("superadmin", "admin", "admin_refs"):
+        builder.button(text="🔗 Рефералы")
+    if role in _SUPERADMIN_ROLES:
+        builder.button(text="💼 Вакансии")
+        builder.button(text="🏷 Ниши")
+        builder.button(text="❓ Вопросы")
+        builder.button(text="👑 Управление")
     builder.adjust(2)
     return builder.as_markup(resize_keyboard=True)
+
+
+def admin_manage_admins_kb(admins) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for acc in admins:
+        tag = f"@{acc.username}" if acc.username else acc.name
+        builder.button(text=f"{tag} — {acc.role.name}", callback_data=f"mgmt_admin:{acc.id}")
+    builder.button(text="➕ Назначить нового", callback_data="mgmt_add_admin")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+_ROLE_LABEL = {
+    "superadmin": "👑 Суперадмин",
+    "admin_refs": "🔗 Отклики + Рефералы",
+    "admin_apps": "📋 Только отклики",
+    "user": "👤 Пользователь",
+}
+
+
+def admin_role_select_kb(account_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for role_key, label in _ROLE_LABEL.items():
+        builder.button(text=label, callback_data=f"mgmt_set_role:{account_id}:{role_key}")
+    builder.button(text="⬅️ Назад", callback_data="mgmt_list")
+    builder.adjust(1)
+    return builder.as_markup()
 
 
 def questions_list_kb(questions, page: int = 0, total_pages: int = 1) -> InlineKeyboardMarkup:

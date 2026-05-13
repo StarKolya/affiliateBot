@@ -166,6 +166,13 @@ def payout_history_kb(payouts, page: int, total_pages: int) -> InlineKeyboardMar
     return builder.as_markup()
 
 
+def payout_wallet_cancel_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="❌ Отмена", callback_data="payout_menu")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
 def payout_create_kb(available_amount) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(

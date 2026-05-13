@@ -20,6 +20,7 @@ from bot.keyboards.user_kb import (
     main_menu_kb,
     niche_list_kb,
     payout_create_kb,
+    payout_wallet_cancel_kb,
     payout_history_kb,
     payout_menu_kb,
     referral_create_type_kb,
@@ -689,23 +690,23 @@ async def callback_payout_create(callback: CallbackQuery, state: FSMContext) -> 
     await callback.answer()
 
 
+_WALLET_PROMPT = (
+    "<b><blockquote>💰 Финансы</blockquote>\n\n"
+    "Введи адрес кошелька <b>USDT TRC20</b>:\n\n"
+    "<blockquote>⚠️ Убедись, что адрес именно в сети TRC20.\n"
+    "Средства, отправленные на адрес другой сети, будут безвозвратно потеряны.</blockquote></b>"
+)
+
+
 @router.callback_query(RequestPayoutStates.enter_amount, F.data == "payout_all_available")
 async def callback_payout_all_available(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
-    await state.clear()
     amount = Decimal(data["available"])
-    account_id = data["account_id"]
-    try:
-        await payout_service.request_payout(account_id=account_id, amount=amount)
-    except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
-        return
+    await state.update_data(payout_amount=str(amount))
+    await state.set_state(RequestPayoutStates.enter_wallet)
     await callback.message.edit_media(
-        InputMediaPhoto(
-            media=FSInputFile(_FINANCE_IMAGE),
-            caption=f"<b><blockquote>💰 Финансы</blockquote>\n\n✅ Заявка на вывод <b>${amount:.2f}</b> отправлена!</b>",
-        ),
-        reply_markup=payout_menu_kb(has_available=False),
+        InputMediaPhoto(media=FSInputFile(_FINANCE_IMAGE), caption=_WALLET_PROMPT),
+        reply_markup=payout_wallet_cancel_kb(),
     )
     await callback.answer()
 
@@ -727,9 +728,30 @@ async def fsm_payout_enter_amount(message: Message, state: FSMContext) -> None:
         await message.answer(f"Сумма превышает доступный баланс (${available:.2f}). Введи меньшую сумму:")
         return
 
+    await state.update_data(payout_amount=str(amount))
+    await state.set_state(RequestPayoutStates.enter_wallet)
+    await message.answer_photo(
+        FSInputFile(_FINANCE_IMAGE),
+        caption=_WALLET_PROMPT,
+        reply_markup=payout_wallet_cancel_kb(),
+    )
+
+
+@router.message(RequestPayoutStates.enter_wallet)
+async def fsm_payout_enter_wallet(message: Message, state: FSMContext) -> None:
+    wallet = message.text.strip()
+    if not (wallet.startswith("T") and len(wallet) == 34 and wallet.isalnum()):
+        await message.answer(
+            "❌ Неверный формат адреса. Адрес USDT TRC20 начинается с <b>T</b> и содержит <b>34 символа</b>.\n\nПопробуй ещё раз:",
+            reply_markup=payout_wallet_cancel_kb(),
+        )
+        return
+
+    data = await state.get_data()
+    amount = Decimal(data["payout_amount"])
     await state.clear()
     try:
-        await payout_service.request_payout(account_id=data["account_id"], amount=amount)
+        await payout_service.request_payout(account_id=data["account_id"], amount=amount, wallet_address=wallet)
     except ValueError as e:
         await message.answer(str(e))
         return
