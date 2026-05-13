@@ -14,6 +14,7 @@ from bot.keyboards.user_kb import (
     PAYOUT_HISTORY_PAGE_SIZE,
     REFERRAL_PAGE_SIZE,
     apply_cancel_kb,
+    apply_yesno_kb,
     job_detail_kb,
     job_list_kb,
     main_menu_kb,
@@ -290,12 +291,33 @@ async def callback_apply(callback: CallbackQuery, state: FSMContext) -> None:
         index=0,
         answers={},
     )
-    first = questions[0]
+    first_q = {"id": questions[0].id, "text": questions[0].question.description, "type": questions[0].question.expected_answer_type}
     await callback.message.edit_text(
-        f"<b>Вопрос 1/{len(questions)}:</b>\n\n{first.question.description}",
-        reply_markup=apply_cancel_kb(),
+        f"<b>Вопрос 1/{len(questions)}:</b>\n\n{first_q['text']}",
+        reply_markup=_question_kb(first_q),
     )
     await callback.answer()
+
+
+def _question_kb(q: dict):
+    return apply_yesno_kb() if q["type"] == "yes_no" else apply_cancel_kb()
+
+
+async def _finish_application(target: Message, data: dict) -> None:
+    try:
+        application = await application_service.start_application(
+            account_id=data["account_id"],
+            job_id=data["job_id"],
+            referred_by_code=data["referred_by_code"],
+        )
+        await application_service.submit_answers(
+            application_id=application.id,
+            answers={int(k): v for k, v in data["answers"].items()},
+        )
+    except ValueError:
+        await target.answer("Вы уже откликались на эту вакансию.")
+        return
+    await target.answer("<b>🟢 Ваша заявка принята! Менеджер свяжеться с вами 🫵</b>", parse_mode="HTML")
 
 
 @router.message(ApplyStates.answering)
@@ -306,6 +328,9 @@ async def fsm_collect_answer(message: Message, state: FSMContext) -> None:
     answers = data["answers"]
 
     current_q = questions[index]
+    if current_q["type"] == "yes_no":
+        await message.answer("Пожалуйста, используйте кнопки Да / Нет:")
+        return
     if current_q["type"] == "number":
         try:
             float(message.text.replace(",", "."))
@@ -319,25 +344,41 @@ async def fsm_collect_answer(message: Message, state: FSMContext) -> None:
     if index < len(questions):
         await state.update_data(index=index, answers=answers)
         next_q = questions[index]
-        await message.answer(f"<b>Вопрос {index + 1}/{len(questions)}:</b>\n\n{next_q['text']}", reply_markup=apply_cancel_kb())
+        await message.answer(
+            f"<b>Вопрос {index + 1}/{len(questions)}:</b>\n\n{next_q['text']}",
+            reply_markup=_question_kb(next_q),
+        )
         return
 
     await state.clear()
-    try:
-        application = await application_service.start_application(
-            account_id=data["account_id"],
-            job_id=data["job_id"],
-            referred_by_code=data["referred_by_code"],
+    await _finish_application(message, {**data, "answers": answers})
+
+
+@router.callback_query(ApplyStates.answering, F.data.startswith("apply_yesno:"))
+async def callback_apply_yesno(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    questions = data["questions"]
+    index = data["index"]
+    answers = data["answers"]
+
+    answer = "Да" if callback.data.split(":")[1] == "yes" else "Нет"
+    answers[str(questions[index]["id"])] = answer
+    index += 1
+
+    if index < len(questions):
+        await state.update_data(index=index, answers=answers)
+        next_q = questions[index]
+        await callback.message.edit_text(
+            f"<b>Вопрос {index + 1}/{len(questions)}:</b>\n\n{next_q['text']}",
+            reply_markup=_question_kb(next_q),
         )
-        await application_service.submit_answers(
-            application_id=application.id,
-            answers={int(k): v for k, v in answers.items()},
-        )
-    except ValueError:
-        await message.answer("Вы уже откликались на эту вакансию.")
+        await callback.answer()
         return
 
-    await message.answer("✅ Ваша заявка отправлена!")
+    await state.clear()
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await _finish_application(callback.message, {**data, "answers": answers})
+    await callback.answer()
 
 
 @router.callback_query(ApplyStates.answering, F.data == "apply_cancel")

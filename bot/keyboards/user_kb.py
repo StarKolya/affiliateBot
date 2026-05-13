@@ -52,6 +52,15 @@ def apply_cancel_kb() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def apply_yesno_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Да", callback_data="apply_yesno:yes")
+    builder.button(text="❌ Нет", callback_data="apply_yesno:no")
+    builder.button(text="🚫 Отменить заявку", callback_data="apply_cancel")
+    builder.adjust(2, 1)
+    return builder.as_markup()
+
+
 def job_detail_kb(job_id: int, back_callback: str) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="✅ Откликнуться", callback_data=f"apply:{job_id}")
