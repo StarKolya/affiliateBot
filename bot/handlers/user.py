@@ -471,7 +471,8 @@ async def _show_links_page(target: Message, telegram_id: int, page: int) -> None
             rid = row["referral_id"]
             counts[rid] = counts.get(rid, 0) + 1
 
-    caption = f"<b><blockquote>🔗 Мои ссылки ({len(links)})</blockquote></b>"
+    page_indicator = f"  стр. {page + 1}/{total_pages}" if total_pages > 1 else ""
+    caption = f"<b><blockquote>🔗 Мои ссылки ({len(links)}){page_indicator}</blockquote></b>"
     kb = referral_links_list_kb(page_links, page, total_pages, counts)
 
     if target.photo:

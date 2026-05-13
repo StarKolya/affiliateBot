@@ -550,6 +550,28 @@ async def _render_applications_page(target: Message, data: dict) -> None:
     )
 
 
+def _build_application_detail(app) -> tuple[str, object]:
+    status_ru = _STATUS_DISPLAY_RU.get(app.status.name, app.status.name)
+    job_type_ru = _JOB_TYPE_RU.get(app.job_posting.type, app.job_posting.type)
+    contact = f'<a href="tg://user?id={app.account.telegram_id}">{app.account.name}</a>'
+    if app.account.username:
+        contact += f" (@{app.account.username})"
+    lines = [
+        f"👤 {contact}",
+        f"💼 {app.job_posting.title}",
+        f"🏷 Тип: {job_type_ru}",
+        f"📊 Статус: {status_ru}",
+    ]
+    answers = sorted(app.answers, key=lambda a: a.job_question_id)
+    if answers:
+        lines.append("")
+        for answer in answers:
+            lines.append(f"В: {answer.job_question.question.description}")
+            lines.append(f"О: {answer.answer}")
+    kb = application_status_kb(app.id, app.status.name, app.job_posting.type)
+    return "\n".join(lines), kb
+
+
 @router.callback_query(F.data.startswith("admin_app:"))
 async def callback_view_application(callback: CallbackQuery) -> None:
     application_id = int(callback.data.split(":")[1])
@@ -557,52 +579,57 @@ async def callback_view_application(callback: CallbackQuery) -> None:
     if app is None:
         await callback.answer("Отклик не найден.", show_alert=True)
         return
-
-    status_ru = _STATUS_DISPLAY_RU.get(app.status.name, app.status.name)
-    job_type_ru = _JOB_TYPE_RU.get(app.job_posting.type, app.job_posting.type)
-    name = app.account.name
-    tg_id = app.account.telegram_id
-    contact = f'<a href="tg://user?id={tg_id}">{name}</a>'
-    if app.account.username:
-        contact += f" (@{app.account.username})"
-
-    lines = [
-        f"👤 {contact}",
-        f"💼 {app.job_posting.title}",
-        f"🏷 Тип: {job_type_ru}",
-        f"📊 Статус: {status_ru}",
-    ]
-
-    answers = sorted(app.answers, key=lambda a: a.job_question_id)
-    if answers:
-        lines.append("")
-        for answer in answers:
-            lines.append(f"В: {answer.job_question.question.description}")
-            lines.append(f"О: {answer.answer}")
-
-    await callback.message.edit_text(
-        "\n".join(lines),
-        parse_mode="HTML",
-        reply_markup=application_status_kb(app.id, app.status.name, app.job_posting.type),
-    )
+    text, kb = _build_application_detail(app)
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("app_status:"))
+async def callback_confirm_status(callback: CallbackQuery) -> None:
+    _, app_id, *status_parts = callback.data.split(":")
+    new_status = ":".join(status_parts)
+    status_ru = _STATUS_DISPLAY_RU.get(new_status, new_status)
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Подтвердить", callback_data=f"app_status_confirm:{app_id}:{new_status}")
+    builder.button(text="❌ Отмена", callback_data=f"app_status_cancel:{app_id}")
+    builder.adjust(2)
+    await callback.message.edit_reply_markup(reply_markup=builder.as_markup())
+    await callback.answer(f'Сменить статус на "{status_ru}"?', show_alert=False)
+
+
+@router.callback_query(F.data.startswith("app_status_confirm:"))
 async def callback_update_status(callback: CallbackQuery) -> None:
     _, app_id, *status_parts = callback.data.split(":")
     new_status = ":".join(status_parts)
+    error_msg = None
     try:
-        app = await application_service.update_application_status(int(app_id), new_status)
+        await application_service.update_application_status(int(app_id), new_status)
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
-        return
+        error_msg = str(e)
+    except Exception as e:
+        logger.error("Failed to update application %s status to %s: %s", app_id, new_status, e)
+        error_msg = "Ошибка при обновлении статуса."
 
-    await callback.message.edit_reply_markup(
-        reply_markup=application_status_kb(app.id, app.status.name, app.job_posting.type)
-    )
-    status_ru = _STATUS_DISPLAY_RU.get(new_status, new_status)
-    await callback.answer(f"Статус обновлён: {status_ru}")
+    app = await application_service.get_application(int(app_id))
+    if app:
+        text, kb = _build_application_detail(app)
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+
+    if error_msg:
+        await callback.answer(error_msg, show_alert=True)
+    else:
+        status_ru = _STATUS_DISPLAY_RU.get(new_status, new_status)
+        await callback.answer(f"Статус обновлён: {status_ru}")
+
+
+@router.callback_query(F.data.startswith("app_status_cancel:"))
+async def callback_cancel_status(callback: CallbackQuery) -> None:
+    app_id = int(callback.data.split(":")[1])
+    app = await application_service.get_application(app_id)
+    if app:
+        text, kb = _build_application_detail(app)
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+    await callback.answer()
 
 
 @router.callback_query(F.data == "app_status_noop")
@@ -937,20 +964,32 @@ async def cmd_questions_menu(message: Message) -> None:
 
 @router.callback_query(F.data == "admin_questions_menu")
 async def callback_questions_menu(callback: CallbackQuery) -> None:
-    questions = await job_service.list_all_questions()
-    await callback.message.edit_text(
-        "❓ <b>Банк вопросов</b>",
-        reply_markup=questions_list_kb(questions),
-    )
+    await _render_questions_list(callback.message, page=0, edit=True)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_q_list_page:"))
+async def callback_q_list_page(callback: CallbackQuery) -> None:
+    page = int(callback.data.split(":")[1])
+    await _render_questions_list(callback.message, page=page, edit=True)
     await callback.answer()
 
 
 async def _show_questions_list(target: Message) -> None:
+    await _render_questions_list(target, page=0, edit=False)
+
+
+async def _render_questions_list(target: Message, page: int, edit: bool) -> None:
     questions = await job_service.list_all_questions()
-    await target.answer(
-        "❓ <b>Банк вопросов</b>",
-        reply_markup=questions_list_kb(questions),
-    )
+    total_pages = max(1, -(-len(questions) // QUESTIONS_PAGE_SIZE))
+    page = min(page, total_pages - 1)
+    page_qs = questions[page * QUESTIONS_PAGE_SIZE:(page + 1) * QUESTIONS_PAGE_SIZE]
+    text = f"❓ <b>Банк вопросов</b>  (стр. {page + 1}/{total_pages})"
+    kb = questions_list_kb(page_qs, page, total_pages)
+    if edit:
+        await target.edit_text(text, reply_markup=kb)
+    else:
+        await target.answer(text, reply_markup=kb)
 
 
 @router.callback_query(F.data.startswith("admin_question_detail:"))
@@ -979,12 +1018,8 @@ async def callback_question_delete(callback: CallbackQuery) -> None:
 async def callback_question_delete_confirm(callback: CallbackQuery) -> None:
     question_id = int(callback.data.split(":")[1])
     await job_service.delete_question(question_id)
-    questions = await job_service.list_all_questions()
-    await callback.message.edit_text(
-        "✅ Вопрос удалён.\n\n❓ <b>Банк вопросов</b>",
-        reply_markup=questions_list_kb(questions),
-    )
-    await callback.answer()
+    await _render_questions_list(callback.message, page=0, edit=True)
+    await callback.answer("✅ Вопрос удалён.")
 
 
 @router.callback_query(F.data == "admin_create_question")
@@ -1025,9 +1060,5 @@ async def fsm_question_answer_type(callback: CallbackQuery, state: FSMContext) -
         answer_type=answer_type,
     )
     type_ru = _ANSWER_TYPE_RU.get(answer_type, answer_type)
-    questions = await job_service.list_all_questions()
-    await callback.message.edit_text(
-        f"✅ Вопрос <b>{q.title}</b> добавлен (тип: {type_ru}).\n\n❓ <b>Банк вопросов</b>",
-        reply_markup=questions_list_kb(questions),
-    )
-    await callback.answer()
+    await _render_questions_list(callback.message, page=0, edit=True)
+    await callback.answer(f"✅ Вопрос {q.title} добавлен (тип: {type_ru}).")

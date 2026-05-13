@@ -34,12 +34,23 @@ def admin_menu_kb() -> ReplyKeyboardMarkup:
     return builder.as_markup(resize_keyboard=True)
 
 
-def questions_list_kb(questions) -> InlineKeyboardMarkup:
+def questions_list_kb(questions, page: int = 0, total_pages: int = 1) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for q in questions:
         builder.button(text=q.title, callback_data=f"admin_question_detail:{q.id}")
+    nav = []
+    if page > 0:
+        nav.append(("◀️", f"admin_q_list_page:{page - 1}"))
+    if page < total_pages - 1:
+        nav.append(("▶️", f"admin_q_list_page:{page + 1}"))
+    for text, cb in nav:
+        builder.button(text=text, callback_data=cb)
     builder.button(text="➕ Добавить вопрос", callback_data="admin_create_question")
-    builder.adjust(1)
+    rows = [1] * len(questions)
+    if nav:
+        rows.append(len(nav))
+    rows.append(1)
+    builder.adjust(*rows)
     return builder.as_markup()
 
 
