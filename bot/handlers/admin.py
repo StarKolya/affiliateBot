@@ -850,9 +850,10 @@ async def callback_referrer_detail(callback: CallbackQuery) -> None:
         return
     stats = await referral_service.get_account_stats(account_id)
     links = await referral_service.list_user_referrals(account_id)
-    tag = f"@{account.username}" if account.username else account.name
+    name_link = f'<a href="tg://user?id={account.telegram_id}">{account.name}</a>'
+    tag = f' (@{account.username})' if account.username else ""
     await callback.message.edit_text(
-        f"👤 <b>{account.name}</b>  {tag}\n\n"
+        f"👤 {name_link}{tag}\n\n"
         f"🔗 Ссылок: {len(links)}\n"
         f"👥 Активации: {stats.total_referred}\n"
         f"📝 Отклики: {stats.total_applications}\n"

@@ -47,6 +47,7 @@ _STATS_IMAGE = Path(__file__).parent.parent / "images" / "statistics.jpg"
 _FINANCE_IMAGE = Path(__file__).parent.parent / "images" / "finance.jpg"
 _TRANSACTION_IMAGE = Path(__file__).parent.parent / "images" / "transaction_history.jpg"
 _MY_LINKS_IMAGE = Path(__file__).parent.parent / "images" / "my_links.jpg"
+_OFFER_DESC_IMAGE = Path(__file__).parent.parent / "images" / "offer_description.jpg"
 
 
 def _parse_referral_code(args: str | None) -> str | None:
@@ -98,8 +99,9 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot) -> None:
             caption=f"<b>Добро пожаловать, {account.name}!</b>",
             reply_markup=main_menu_kb(),
         )
-        await message.answer(
-            _format_job(bound_job),
+        await message.answer_photo(
+            FSInputFile(_OFFER_DESC_IMAGE),
+            caption=_format_job(bound_job),
             reply_markup=job_detail_kb(bound_job.id, back_callback="browse_jobs"),
         )
     else:
@@ -214,8 +216,9 @@ async def callback_select_niche(callback: CallbackQuery) -> None:
     if len(jobs) == 1:
         job = jobs[0]
         await callback.message.delete()
-        await callback.message.answer(
-            _format_job(job),
+        await callback.message.answer_photo(
+            FSInputFile(_OFFER_DESC_IMAGE),
+            caption=_format_job(job),
             reply_markup=job_detail_kb(job.id, back_callback="browse_jobs"),
         )
     else:
@@ -239,8 +242,9 @@ async def callback_job_detail(callback: CallbackQuery) -> None:
         await callback.answer("Вакансия больше недоступна.", show_alert=True)
         return
     await callback.message.delete()
-    await callback.message.answer(
-        _format_job(job),
+    await callback.message.answer_photo(
+        FSInputFile(_OFFER_DESC_IMAGE),
+        caption=_format_job(job),
         reply_markup=job_detail_kb(job.id, back_callback=f"niche:{niche_id}"),
     )
     await callback.answer()
@@ -278,7 +282,8 @@ async def callback_apply(callback: CallbackQuery, state: FSMContext) -> None:
         except ValueError:
             await callback.answer("Вы уже откликались на эту вакансию.", show_alert=True)
             return
-        await callback.message.edit_text("✅ Ваша заявка отправлена!")
+        await callback.message.delete()
+        await callback.message.answer("✅ Ваша заявка отправлена!")
         await callback.answer()
         return
 
@@ -295,7 +300,8 @@ async def callback_apply(callback: CallbackQuery, state: FSMContext) -> None:
         answers={},
     )
     first_q = {"id": questions[0].id, "text": questions[0].question.description, "type": questions[0].question.expected_answer_type}
-    await callback.message.edit_text(
+    await callback.message.delete()
+    await callback.message.answer(
         f"<b>Вопрос 1/{len(questions)}:</b>\n\n{first_q['text']}",
         reply_markup=_question_kb(first_q),
     )
