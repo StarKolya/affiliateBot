@@ -23,7 +23,7 @@ def main_menu_kb() -> ReplyKeyboardMarkup:
     """Persistent bottom keyboard shown after a user passes the subscription check."""
     builder = ReplyKeyboardBuilder()
     builder.button(text="📋 Вакансии")
-    builder.button(text="👥 Network Partners")
+    builder.button(text="👥 JN Partners")
     builder.adjust(2)
     return builder.as_markup(resize_keyboard=True)
 

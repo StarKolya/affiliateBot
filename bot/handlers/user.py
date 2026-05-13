@@ -110,7 +110,8 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot) -> None:
             "🫵 Здесь тебя ждут:\n"
             "<blockquote>🔹 Удалённые вакансии\n"
             "🔹 Арбитраж трафика\n"
-            "🔹 Работа с инфлюенсерами</blockquote></b>",
+            "🔹 Работа с инфлюенсерами</blockquote>\n\n"
+            "Найди себя прямо сейчас 👇</b>",
             reply_markup=main_menu_kb(),
         )
 
@@ -149,7 +150,8 @@ async def callback_check_subscription(callback: CallbackQuery, bot: Bot) -> None
             "🫵 Здесь тебя ждут:\n"
             "<blockquote>🔹 Удалённые вакансии\n"
             "🔹 Арбитраж трафика\n"
-            "🔹 Работа с инфлюенсерами</blockquote></b>",
+            "🔹 Работа с инфлюенсерами</blockquote>\n\n"
+            "Найди себя прямо сейчас 👇</b>",
             reply_markup=main_menu_kb(),
         )
 
@@ -398,7 +400,7 @@ _REFERRAL_CAPTION = (
 )
 
 
-@router.message(F.text == "👥 Network Partners")
+@router.message(F.text == "👥 JN Partners")
 async def cmd_referral_links(message: Message) -> None:
     await message.answer_photo(
         FSInputFile(_REFERRAL_IMAGE),
@@ -471,8 +473,8 @@ async def _show_links_page(target: Message, telegram_id: int, page: int) -> None
             rid = row["referral_id"]
             counts[rid] = counts.get(rid, 0) + 1
 
-    page_indicator = f"  стр. {page + 1}/{total_pages}" if total_pages > 1 else ""
-    caption = f"<b><blockquote>🔗 Мои ссылки ({len(links)}){page_indicator}</blockquote></b>"
+    page_indicator = f"  стр. {page + 1}/{total_pages}"
+    caption = f"<b><blockquote>🔗 Мои ссылки ({len(links)})</blockquote></b>\n{page_indicator}"
     kb = referral_links_list_kb(page_links, page, total_pages, counts)
 
     if target.photo:
@@ -505,7 +507,7 @@ async def callback_referral_detail(callback: CallbackQuery) -> None:
         f"🪫 Отклонено: {stats.declined}\n"
         f"✅ Принято: {stats.joined_team}\n"
         f"📚 Обучение: {stats.bought_course}\n\n"
-        f"💰 Доход: ${stats.earned:.2f}\n\n"
+        f"💰 Доход: ${stats.earned:.2f}</b>\n\n"
         f"<code>{link}</code>",
         reply_markup=referral_detail_kb(),
     )

@@ -560,7 +560,8 @@ def _build_application_detail(app) -> tuple[str, object]:
         f"👤 {contact}",
         f"💼 {app.job_posting.title}",
         f"🏷 Тип: {job_type_ru}",
-        f"📊 Статус: {status_ru}",
+        "",
+        f"<b><blockquote>📊 Статус: {status_ru}</blockquote></b>",
     ]
     answers = sorted(app.answers, key=lambda a: a.job_question_id)
     if answers:

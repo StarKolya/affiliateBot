@@ -284,10 +284,7 @@ def application_status_kb(application_id: int, current_status: str, job_type: st
     statuses = STATUSES_BY_TYPE.get(job_type, ("Pending", "Declined"))
     for status in statuses:
         display = _STATUS_DISPLAY_RU.get(status, status)
-        if status == current_status:
-            builder.button(text=f"✅ {display}", callback_data="app_status_noop")
-        else:
-            builder.button(text=display, callback_data=f"app_status:{application_id}:{status}")
+        builder.button(text=display, callback_data=f"app_status:{application_id}:{status}")
     builder.button(text="⬅️ Назад", callback_data="admin_list_applications")
     builder.adjust(1)
     return builder.as_markup()

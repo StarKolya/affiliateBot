@@ -40,7 +40,7 @@ async def request_payout(account_id: int, amount: Decimal) -> PayoutRequest:
     if amount <= 0:
         raise ValueError("Amount must be greater than zero")
     if await payout_repo.has_pending(account_id):
-        raise ValueError("You already have a pending payout request")
+        raise ValueError("У вас уже есть активный запрос на выплату")
     payout = await payout_repo.create(account_id=account_id, amount=amount)
     logger.info("Payout request created | account=%s amount=%s", account_id, amount)
     return payout
