@@ -132,9 +132,17 @@ async def callback_check_subscription(callback: CallbackQuery, bot: Bot) -> None
         if not account.subscription_verified:
             await user_service.mark_subscription_verified(account)
         await callback.message.delete()
+
+        bound_job = None
+        if account.referred_by_code:
+            referral = await referral_service.get_referral_by_code(account.referred_by_code)
+            if referral and referral.job_posting_id:
+                bound_job = await job_service.get_job(referral.job_posting_id)
+
         await callback.message.answer_photo(
             FSInputFile(_START_IMAGE),
-            caption=f"<b>Добро пожаловать, {account.name}!\n\n"
+            caption=f"<b>Добро пожаловать, {account.name}!</b>" if bound_job else
+            f"<b>Добро пожаловать, {account.name}!\n\n"
             "🌐 Ты попал в Jobs Network\n"
             "<blockquote>место, где находят себя в digital-индустрии</blockquote>\n\n"
             "🫵 Здесь тебя ждут:\n"
@@ -143,6 +151,12 @@ async def callback_check_subscription(callback: CallbackQuery, bot: Bot) -> None
             "🔹 Работа с инфлюенсерами</blockquote></b>",
             reply_markup=main_menu_kb(),
         )
+
+        if bound_job:
+            await callback.message.answer(
+                _format_job(bound_job),
+                reply_markup=job_detail_kb(bound_job.id, back_callback="browse_jobs"),
+            )
     else:
         try:
             await callback.message.edit_caption(
@@ -229,9 +243,9 @@ async def callback_job_detail(callback: CallbackQuery) -> None:
 
 
 def _format_job(job) -> str:
-    lines = [f"<b>💼 {job.title}</b>", f"📌 Тип: {job.type}"]
+    lines = [f"<b><blockquote>💻 Название вакансии</blockquote></b>", job.title]
     if job.description:
-        lines += ["", job.description]
+        lines += ["", f"<b><blockquote>📑 Описание:</blockquote></b>", job.description]
     return "\n".join(lines)
 
 
@@ -343,7 +357,7 @@ _REFERRAL_CAPTION = (
 )
 
 
-@router.message(F.text == "🔗 Рефералы")
+@router.message(F.text == "👥 Network Partners")
 async def cmd_referral_links(message: Message) -> None:
     await message.answer_photo(
         FSInputFile(_REFERRAL_IMAGE),
@@ -371,7 +385,7 @@ async def callback_referral_stats(callback: CallbackQuery) -> None:
         InputMediaPhoto(
             media=FSInputFile(_STATS_IMAGE),
             caption=(
-                f"<b>"
+                f"<b><blockquote>📊 Статистика</blockquote>\n\n"
                 f"👥 Активации: {stats.total_referred}\n"
                 f"📝 Отклики: {stats.total_applications}\n"
                 f"⌛️ В обработке: {stats.total_pending}\n"
@@ -379,6 +393,7 @@ async def callback_referral_stats(callback: CallbackQuery) -> None:
                 f"✅ Принято: {stats.total_joined_team}\n"
                 f"📚 Обучение: {stats.total_bought_course}\n\n"
                 f"💰 Доход: ${stats.total_earned:.2f}</b>"
+
             ),
         ),
         reply_markup=referral_stats_kb(),

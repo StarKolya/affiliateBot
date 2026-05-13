@@ -74,6 +74,20 @@ async def list_all_questions() -> List[Question]:
     return await question_repo.get_all()
 
 
+async def get_question(question_id: int) -> Optional[Question]:
+    return await question_repo.get_by_id(question_id)
+
+
+async def create_question(title: str, description: str, answer_type: str) -> Question:
+    return await question_repo.create(title=title, description=description, expected_answer_type=answer_type)
+
+
+async def delete_question(question_id: int) -> None:
+    question = await question_repo.get_by_id(question_id)
+    if question:
+        await question_repo.delete(question)
+
+
 async def create_job_posting(
     niche_id: int,
     title: str,

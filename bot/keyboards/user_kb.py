@@ -23,7 +23,7 @@ def main_menu_kb() -> ReplyKeyboardMarkup:
     """Persistent bottom keyboard shown after a user passes the subscription check."""
     builder = ReplyKeyboardBuilder()
     builder.button(text="📋 Вакансии")
-    builder.button(text="🔗 Рефералы")
+    builder.button(text="👥 Network Partners")
     builder.adjust(2)
     return builder.as_markup(resize_keyboard=True)
 
@@ -67,7 +67,7 @@ def referral_menu_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="📊 Статистика", callback_data="referral_stats")
     builder.button(text="🔗 Мои ссылки", callback_data="referral_links")
-    builder.button(text="🌐 Website", url="https://example.com")
+    builder.button(text="📃 JN Partners Гайд", url="https://telegra.ph/Gajd---Jobs-Network-Partners-05-03")
     builder.adjust(1)
     return builder.as_markup()
 

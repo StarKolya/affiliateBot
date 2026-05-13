@@ -29,8 +29,44 @@ def admin_menu_kb() -> ReplyKeyboardMarkup:
     builder.button(text="💼 Вакансии")
     builder.button(text="🏷 Ниши")
     builder.button(text="🔗 Рефералы")
+    builder.button(text="❓ Вопросы")
     builder.adjust(2)
     return builder.as_markup(resize_keyboard=True)
+
+
+def questions_list_kb(questions) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for q in questions:
+        builder.button(text=q.title, callback_data=f"admin_question_detail:{q.id}")
+    builder.button(text="➕ Добавить вопрос", callback_data="admin_create_question")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def question_detail_kb(question_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🗑 Удалить", callback_data=f"admin_question_delete:{question_id}")
+    builder.button(text="⬅️ Назад", callback_data="admin_questions_menu")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def question_delete_confirm_kb(question_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Да, удалить", callback_data=f"admin_question_delete_confirm:{question_id}")
+    builder.button(text="❌ Отмена", callback_data=f"admin_question_detail:{question_id}")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def question_answer_type_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="Текст", callback_data="admin_q_type:text")
+    builder.button(text="Число", callback_data="admin_q_type:number")
+    builder.button(text="Да/Нет", callback_data="admin_q_type:yes_no")
+    builder.button(text="❌ Отмена", callback_data="admin_cancel")
+    builder.adjust(3, 1)
+    return builder.as_markup()
 
 
 def jobs_menu_kb() -> InlineKeyboardMarkup:
@@ -156,7 +192,9 @@ def question_select_kb(
     return builder.as_markup()
 
 
-def applications_page_kb(apps, page: int, total_pages: int, has_filters: bool) -> InlineKeyboardMarkup:
+def applications_page_kb(
+    apps, page: int, total_pages: int, has_filters: bool, has_sort: bool
+) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for app in apps:
         status_ru = _STATUS_DISPLAY_RU.get(app.status.name, app.status.name)
@@ -168,6 +206,8 @@ def applications_page_kb(apps, page: int, total_pages: int, has_filters: bool) -
         nav.append(("◀️ Назад", "admin_apps_prev"))
     filter_label = "🔍 Фильтры ●" if has_filters else "🔍 Фильтры"
     nav.append((filter_label, "admin_apps_filters"))
+    sort_label = "↕️ Сортировка ●" if has_sort else "↕️ Сортировка"
+    nav.append((sort_label, "admin_apps_sort"))
     if page < total_pages - 1:
         nav.append(("Вперёд ▶️", "admin_apps_next"))
 
@@ -175,6 +215,27 @@ def applications_page_kb(apps, page: int, total_pages: int, has_filters: bool) -
         builder.button(text=text, callback_data=cb)
 
     builder.adjust(*([1] * len(apps)), len(nav))
+    return builder.as_markup()
+
+
+def application_sort_kb(numeric_questions: list, sort_by: str | None, ascending: bool) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+
+    options = [("date", "По дате")]
+    for q in numeric_questions:
+        options.append((str(q["jq_id"]), q["text"]))
+
+    for key, label in options:
+        if sort_by == key:
+            direction = "↑" if ascending else "↓"
+            builder.button(text=f"✅ {direction} {label}", callback_data=f"admin_sort_toggle:{key}")
+        else:
+            builder.button(text=label, callback_data=f"admin_sort_set:{key}")
+
+    if sort_by:
+        builder.button(text="🗑 Сбросить сортировку", callback_data="admin_sort_clear")
+    builder.button(text="⬅️ К откликам", callback_data="admin_apps_back")
+    builder.adjust(1)
     return builder.as_markup()
 
 
@@ -215,7 +276,7 @@ def referrals_menu_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="👥 Все рефереры", callback_data="admin_all_referrers")
     builder.button(text="💰 Финансы", callback_data="admin_finance")
-    builder.adjust(2)
+    builder.adjust(1)
     return builder.as_markup()
 
 

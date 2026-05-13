@@ -133,5 +133,31 @@ def apply_numeric_filters(
     return result
 
 
+def apply_sort(
+    applications: List[JobApplication],
+    sort_by: str,
+    ascending: bool,
+) -> List[JobApplication]:
+    """Sort applications in-memory. sort_by is 'date' or a str(jq_id)."""
+    if sort_by == "date":
+        return sorted(applications, key=lambda a: a.created_at, reverse=not ascending)
+
+    try:
+        jq_id = int(sort_by)
+    except ValueError:
+        return applications
+
+    def numeric_key(app):
+        answer = next((a for a in app.answers if a.job_question_id == jq_id), None)
+        if answer is None:
+            return float("-inf") if ascending else float("inf")
+        try:
+            return float(answer.answer)
+        except ValueError:
+            return float("-inf") if ascending else float("inf")
+
+    return sorted(applications, key=numeric_key, reverse=not ascending)
+
+
 async def list_user_applications(account_id: int) -> List[JobApplication]:
     return await app_repo.get_by_account(account_id)

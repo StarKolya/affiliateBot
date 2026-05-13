@@ -35,3 +35,9 @@ class RequestPayoutStates(StatesGroup):
 
 class AdminPayStates(StatesGroup):
     enter_amount = State()
+
+
+class CreateQuestionStates(StatesGroup):
+    enter_title = State()
+    enter_description = State()
+    select_answer_type = State()

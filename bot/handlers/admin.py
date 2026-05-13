@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.filters import IsAdmin
-from bot.handlers.states import AdminPayStates, CreateJobStates, CreateNicheStates, FilterApplicationsStates
+from bot.handlers.states import AdminPayStates, CreateJobStates, CreateNicheStates, CreateQuestionStates, FilterApplicationsStates
 from bot.keyboards.admin_kb import (
     APPS_PAGE_SIZE,
     FINANCE_PAGE_SIZE,
@@ -18,6 +18,7 @@ from bot.keyboards.admin_kb import (
     admin_menu_kb,
     admin_niche_select_kb,
     application_filter_kb,
+    application_sort_kb,
     application_status_kb,
     applications_page_kb,
     finance_list_kb,
@@ -30,7 +31,11 @@ from bot.keyboards.admin_kb import (
     niche_detail_kb,
     niches_manage_kb,
     payout_action_kb,
+    question_answer_type_kb,
+    question_delete_confirm_kb,
+    question_detail_kb,
     question_select_kb,
+    questions_list_kb,
     referrals_menu_kb,
     referrer_detail_kb,
     referrers_list_kb,
@@ -414,6 +419,57 @@ async def callback_filter_clear(callback: CallbackQuery, state: FSMContext) -> N
     await callback.answer()
 
 
+# --- Sorting ---
+
+@router.callback_query(F.data == "admin_apps_sort")
+async def callback_show_sort(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    await callback.message.edit_text(
+        "Сортировка:",
+        reply_markup=application_sort_kb(
+            data.get("numeric_questions", []),
+            data.get("sort_by"),
+            data.get("sort_ascending", True),
+        ),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_sort_set:"))
+async def callback_sort_set(callback: CallbackQuery, state: FSMContext) -> None:
+    key = callback.data.split(":")[1]
+    await state.update_data(sort_by=key, sort_ascending=True, page=0)
+    data = await state.get_data()
+    await callback.message.edit_text(
+        "Сортировка:",
+        reply_markup=application_sort_kb(data.get("numeric_questions", []), key, True),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_sort_toggle:"))
+async def callback_sort_toggle(callback: CallbackQuery, state: FSMContext) -> None:
+    key = callback.data.split(":")[1]
+    data = await state.get_data()
+    ascending = not data.get("sort_ascending", True)
+    await state.update_data(sort_ascending=ascending, page=0)
+    await callback.message.edit_reply_markup(
+        reply_markup=application_sort_kb(data.get("numeric_questions", []), key, ascending)
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_sort_clear")
+async def callback_sort_clear(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.update_data(sort_by=None, sort_ascending=True, page=0)
+    data = await state.get_data()
+    await callback.message.edit_text(
+        "Сортировка сброшена:",
+        reply_markup=application_sort_kb(data.get("numeric_questions", []), None, True),
+    )
+    await callback.answer()
+
+
 # --- Shared render ---
 
 async def _render_applications_page(target: Message, data: dict) -> None:
@@ -421,12 +477,17 @@ async def _render_applications_page(target: Message, data: dict) -> None:
     job_id = data.get("job_id")
     page = data.get("page", 0)
     filters = {int(k): v for k, v in data.get("filters", {}).items()}
+    sort_by = data.get("sort_by")
+    ascending = data.get("sort_ascending", True)
 
     if job_id is not None:
         applications = await application_service.list_applications_by_job(job_id)
         applications = application_service.apply_numeric_filters(applications, filters)
     else:
         applications = await application_service.list_applications_by_niche(niche_id)
+
+    if sort_by:
+        applications = application_service.apply_sort(applications, sort_by, ascending)
 
     if not applications:
         await target.edit_text("Нет откликов по выбранным фильтрам.")
@@ -439,7 +500,7 @@ async def _render_applications_page(target: Message, data: dict) -> None:
     await target.edit_text(
         f"Отклики (стр. {page + 1}/{total_pages}):",
         reply_markup=applications_page_kb(
-            page_apps, page, total_pages, has_filters=bool(filters)
+            page_apps, page, total_pages, has_filters=bool(filters), has_sort=bool(sort_by)
         ),
     )
 
@@ -454,8 +515,14 @@ async def callback_view_application(callback: CallbackQuery) -> None:
 
     status_ru = _STATUS_DISPLAY_RU.get(app.status.name, app.status.name)
     job_type_ru = _JOB_TYPE_RU.get(app.job_posting.type, app.job_posting.type)
+    name = app.account.name
+    tg_id = app.account.telegram_id
+    contact = f'<a href="tg://user?id={tg_id}">{name}</a>'
+    if app.account.username:
+        contact += f" (@{app.account.username})"
+
     lines = [
-        f"👤 {app.account.name}",
+        f"👤 {contact}",
         f"💼 {app.job_posting.title}",
         f"🏷 Тип: {job_type_ru}",
         f"📊 Статус: {status_ru}",
@@ -470,6 +537,7 @@ async def callback_view_application(callback: CallbackQuery) -> None:
 
     await callback.message.edit_text(
         "\n".join(lines),
+        parse_mode="HTML",
         reply_markup=application_status_kb(app.id, app.status.name, app.job_posting.type),
     )
     await callback.answer()
@@ -810,3 +878,111 @@ async def callback_payout_reject(callback: CallbackQuery) -> None:
     await payout_service.reject_payout(payout_id)
     await callback.answer("❌ Запрос отклонён.", show_alert=True)
     await _show_finance_page(callback.message, page=0)
+
+
+# --- Question bank management ---
+
+_ANSWER_TYPE_RU = {"text": "Текст", "number": "Число", "yes_no": "Да/Нет"}
+
+
+@router.message(F.text == "❓ Вопросы")
+async def cmd_questions_menu(message: Message) -> None:
+    await _show_questions_list(message)
+
+
+@router.callback_query(F.data == "admin_questions_menu")
+async def callback_questions_menu(callback: CallbackQuery) -> None:
+    questions = await job_service.list_all_questions()
+    await callback.message.edit_text(
+        "❓ <b>Банк вопросов</b>",
+        reply_markup=questions_list_kb(questions),
+    )
+    await callback.answer()
+
+
+async def _show_questions_list(target: Message) -> None:
+    questions = await job_service.list_all_questions()
+    await target.answer(
+        "❓ <b>Банк вопросов</b>",
+        reply_markup=questions_list_kb(questions),
+    )
+
+
+@router.callback_query(F.data.startswith("admin_question_detail:"))
+async def callback_question_detail(callback: CallbackQuery) -> None:
+    question_id = int(callback.data.split(":")[1])
+    q = await job_service.get_question(question_id)
+    if q is None:
+        await callback.answer("Вопрос не найден.", show_alert=True)
+        return
+    type_ru = _ANSWER_TYPE_RU.get(q.expected_answer_type, q.expected_answer_type)
+    await callback.message.edit_text(
+        f"❓ <b>{q.title}</b>\n\n{q.description}\n\nТип ответа: {type_ru}",
+        reply_markup=question_detail_kb(question_id),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_question_delete:"))
+async def callback_question_delete(callback: CallbackQuery) -> None:
+    question_id = int(callback.data.split(":")[1])
+    await callback.message.edit_reply_markup(reply_markup=question_delete_confirm_kb(question_id))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_question_delete_confirm:"))
+async def callback_question_delete_confirm(callback: CallbackQuery) -> None:
+    question_id = int(callback.data.split(":")[1])
+    await job_service.delete_question(question_id)
+    questions = await job_service.list_all_questions()
+    await callback.message.edit_text(
+        "✅ Вопрос удалён.\n\n❓ <b>Банк вопросов</b>",
+        reply_markup=questions_list_kb(questions),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_create_question")
+async def callback_create_question(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(CreateQuestionStates.enter_title)
+    await callback.message.edit_text("Введите короткое название вопроса (до 100 символов):")
+    await callback.answer()
+
+
+@router.message(CreateQuestionStates.enter_title)
+async def fsm_question_title(message: Message, state: FSMContext) -> None:
+    if len(message.text) > 100:
+        await message.answer("Слишком длинное название, максимум 100 символов:")
+        return
+    await state.update_data(q_title=message.text)
+    await state.set_state(CreateQuestionStates.enter_description)
+    await message.answer("Введите текст вопроса (до 500 символов):")
+
+
+@router.message(CreateQuestionStates.enter_description)
+async def fsm_question_description(message: Message, state: FSMContext) -> None:
+    if len(message.text) > 500:
+        await message.answer("Слишком длинный текст, максимум 500 символов:")
+        return
+    await state.update_data(q_description=message.text)
+    await state.set_state(CreateQuestionStates.select_answer_type)
+    await message.answer("Выберите тип ответа:", reply_markup=question_answer_type_kb())
+
+
+@router.callback_query(CreateQuestionStates.select_answer_type, F.data.startswith("admin_q_type:"))
+async def fsm_question_answer_type(callback: CallbackQuery, state: FSMContext) -> None:
+    answer_type = callback.data.split(":")[1]
+    data = await state.get_data()
+    await state.clear()
+    q = await job_service.create_question(
+        title=data["q_title"],
+        description=data["q_description"],
+        answer_type=answer_type,
+    )
+    type_ru = _ANSWER_TYPE_RU.get(answer_type, answer_type)
+    questions = await job_service.list_all_questions()
+    await callback.message.edit_text(
+        f"✅ Вопрос <b>{q.title}</b> добавлен (тип: {type_ru}).\n\n❓ <b>Банк вопросов</b>",
+        reply_markup=questions_list_kb(questions),
+    )
+    await callback.answer()
