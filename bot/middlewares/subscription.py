@@ -40,7 +40,7 @@ def _channel_ids() -> list[int]:
 
 
 def _subscribe_caption(name: str) -> str:
-    return f"🫵 Приветствую, {name}!\nПожалуйста, подпишитесь на канал(ы), чтобы использовать Jobs Network!"
+    return f"<b>🫵 Приветствую, {name}!</b>\n<blockquote>Пожалуйста, подпишитесь на канал(ы), чтобы использовать Jobs Network!</blockquote>"
 
 # Updates that drive the subscription flow itself — let them through unconditionally.
 _EXEMPT_CALLBACKS = {"check_subscription"}

@@ -1,3 +1,4 @@
+import asyncio
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -78,8 +79,8 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot) -> None:
     if not subscribed:
         await message.answer_photo(
             FSInputFile(_SUBSCRIBED_IMAGE),
-            caption=f"🫵 Приветствую, {tg_user.first_name}!\n"
-            "Пожалуйста, подпишитесь на канал(ы), чтобы использовать Jobs Network!",
+            caption=f"<b>🫵 Приветствую, {tg_user.first_name}!</b>\n"
+            "<blockquote>Пожалуйста, подпишитесь на канал(ы), чтобы использовать Jobs Network!</blockquote>",
             reply_markup=subscription_check_kb(settings.CHANNEL_URL, settings.CHANNEL_URL_2),
         )
         return
@@ -99,6 +100,7 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot) -> None:
             caption=f"<b>Добро пожаловать, {account.name}!</b>",
             reply_markup=main_menu_kb(),
         )
+        await asyncio.sleep(0.5)
         await message.answer_photo(
             FSInputFile(_OFFER_DESC_IMAGE),
             caption=_format_job(bound_job),
@@ -159,16 +161,17 @@ async def callback_check_subscription(callback: CallbackQuery, bot: Bot) -> None
         )
 
         if bound_job:
-            await callback.message.answer(
-                _format_job(bound_job),
+            await asyncio.sleep(0.5)
+            await callback.message.answer_photo(
+                FSInputFile(_OFFER_DESC_IMAGE),
+                caption=_format_job(bound_job),
                 reply_markup=job_detail_kb(bound_job.id, back_callback="browse_jobs"),
             )
     else:
         try:
             await callback.message.edit_caption(
-                caption=f"❌ Вы ещё не подписались!\n\n"
-                f"🫵 Приветствую, {account.name}!\n"
-                "Пожалуйста, подпишитесь на канал(ы), чтобы использовать Jobs Network!",
+                caption=f"<b>🫵 Приветствую, {account.name}!</b>\n"
+                "<blockquote>Пожалуйста, подпишитесь на канал(ы), чтобы использовать Jobs Network!</blockquote>",
                 reply_markup=subscription_check_kb(settings.CHANNEL_URL, settings.CHANNEL_URL_2),
             )
         except TelegramBadRequest:
@@ -251,9 +254,9 @@ async def callback_job_detail(callback: CallbackQuery) -> None:
 
 
 def _format_job(job) -> str:
-    lines = [f"<b><blockquote>💻 Название вакансии</blockquote></b>", job.title]
+    lines = [f"<blockquote>{job.title}</blockquote>"]
     if job.description:
-        lines += ["", f"<b><blockquote>📑 Описание:</blockquote></b>", job.description]
+        lines += ["", "<b>📑 Описание:</b>", f"<blockquote>{job.description}</blockquote>"]
     return "\n".join(lines)
 
 
