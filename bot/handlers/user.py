@@ -254,9 +254,9 @@ async def callback_job_detail(callback: CallbackQuery) -> None:
 
 
 def _format_job(job) -> str:
-    lines = [f"<blockquote>{job.title}</blockquote>"]
+    lines = [f"💻 <blockquote>{job.title}</blockquote>"]
     if job.description:
-        lines += ["", "<b>📑 Описание:</b>", f"<blockquote>{job.description}</blockquote>"]
+        lines += ["", "<b>📑 Описание:</b>", f"<blockquote expandable>{job.description}</blockquote>"]
     return "\n".join(lines)
 
 
