@@ -159,7 +159,8 @@ def applications_page_kb(apps, page: int, total_pages: int, has_filters: bool) -
     for text, cb in nav:
         builder.button(text=text, callback_data=cb)
 
-    builder.adjust(*([1] * len(apps)), len(nav))
+    builder.button(text="📥 Export CSV", callback_data="admin_apps_export")
+    builder.adjust(*([1] * len(apps)), len(nav), 1)
     return builder.as_markup()
 
 

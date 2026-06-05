@@ -1,6 +1,11 @@
 from typing import List, Optional
 
 from bot.models.job import JobPosting, JobQuestion, Niche, Question
+
+
+def sort_jobs_by_commission(jobs: List[JobPosting]) -> List[JobPosting]:
+    """Return jobs sorted by primary commission descending (highest paying first)."""
+    return sorted(jobs, key=lambda j: float(j.commission), reverse=True)
 from bot.repositories.job_repository import (
     JobPostingRepository,
     JobQuestionRepository,
@@ -22,7 +27,8 @@ async def list_active_niches() -> List[Niche]:
 
 
 async def list_jobs_by_niche(niche_id: int) -> List[JobPosting]:
-    return await job_repo.get_by_niche(niche_id)
+    jobs = await job_repo.get_by_niche(niche_id)
+    return sort_jobs_by_commission(jobs)
 
 
 async def get_job(job_id: int) -> Optional[JobPosting]:
