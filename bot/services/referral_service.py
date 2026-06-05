@@ -14,8 +14,6 @@ logger = get_logger(__name__)
 referral_repo = ReferralRepository()
 earning_repo = ReferralEarningRepository()
 
-# Maps job_type → {status_name: commission_field}
-# "primary" = job.commission, "secondary" = job.commission_secondary
 EARNING_TRIGGERS: dict[str, dict[str, str]] = {
     "partnership": {
         "Deal Closed": "primary",
@@ -52,7 +50,6 @@ class AccountReferralStats:
 
 
 async def create_referral_link(account_id: int, name: str) -> Referral:
-    """Auto-generates a unique code and creates the referral link."""
     for _ in range(5):
         code = secrets.token_urlsafe(8)
         if not await referral_repo.code_exists(code):
@@ -123,11 +120,6 @@ async def maybe_create_earning(
     commission: Decimal,
     commission_secondary: Optional[Decimal] = None,
 ) -> Optional[ReferralEarning]:
-    """
-    Idempotent: creates a ReferralEarning only when the new status is a
-    trigger for the given job type. Amount depends on which trigger fired.
-    DB unique_together on ReferralEarning is the second idempotency guard.
-    """
     triggers = EARNING_TRIGGERS.get(job_type, {})
     commission_field = triggers.get(new_status_name)
     if commission_field is None:

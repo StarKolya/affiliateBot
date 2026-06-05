@@ -8,7 +8,6 @@ _CSV_FIELDS = ["id", "account", "telegram_id", "job", "status", "applied_at"]
 
 
 def iter_application_rows(applications: List["JobApplication"]) -> Generator[dict, None, None]:
-    """Yield one CSV-ready dict per application."""
     for app in applications:
         yield {
             "id": app.id,
@@ -21,7 +20,6 @@ def iter_application_rows(applications: List["JobApplication"]) -> Generator[dic
 
 
 def export_applications_csv(applications: List["JobApplication"]) -> str:
-    """Serialize applications to a CSV file and return the file path."""
     path = f"/tmp/applications_export_{len(applications)}.csv"
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=_CSV_FIELDS)

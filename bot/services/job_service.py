@@ -4,7 +4,6 @@ from bot.models.job import JobPosting, JobQuestion, Niche, Question
 
 
 def sort_jobs_by_commission(jobs: List[JobPosting]) -> List[JobPosting]:
-    """Return jobs sorted by primary commission descending (highest paying first)."""
     return sorted(jobs, key=lambda j: float(j.commission) if j.commission is not None else 0.0, reverse=True)
 from bot.repositories.job_repository import (
     JobPostingRepository,

@@ -34,10 +34,6 @@ async def close_db() -> None:
 
 
 async def seed_initial_data() -> None:
-    """
-    Idempotent seed for lookup tables that must exist before any business logic runs.
-    Called once on startup after generate_schemas.
-    """
     from bot.config import settings
     from bot.models.account import Account, Role
     from bot.models.application import ApplicationStatus
@@ -54,18 +50,11 @@ async def seed_initial_data() -> None:
 
 
 async def seed_test_data() -> None:
-    """
-    Idempotent seed for manual testing.
-    Creates: 2 niches, 3 questions, 2 job postings, assigns questions to jobs.
-    Safe to run multiple times.
-    """
     from bot.models.job import JobPosting, JobQuestion, Niche, Question
 
-    # Niches
     hr, _ = await Niche.get_or_create(name="HR")
     it, _ = await Niche.get_or_create(name="IT")
 
-    # Question bank
     q1, _ = await Question.get_or_create(
         description="Tell us about your relevant experience.",
         defaults={"title": "Experience", "expected_answer_type": "text"},
@@ -79,7 +68,6 @@ async def seed_test_data() -> None:
         defaults={"title": "Expected Salary", "expected_answer_type": "number"},
     )
 
-    # Job postings
     job1, _ = await JobPosting.get_or_create(
         title="Senior Recruiter",
         defaults={
@@ -113,7 +101,6 @@ async def seed_test_data() -> None:
         },
     )
 
-    # Assign questions to jobs (order matters)
     for job, questions in [
         (job1, [(q1, 0), (q2, 1)]),
         (job2, [(q1, 0), (q3, 1)]),

@@ -23,9 +23,8 @@ async def start_application(
     job_id: int,
     referred_by_code: Optional[str] = None,
 ) -> JobApplication:
-    """Create a new application in default 'Processing' status."""
-    already = await app_repo.model.filter(account_id=account_id, job_posting_id=job_id).exists()
-    if already:
+    exists = await app_repo.model.filter(account_id=account_id, job_posting_id=job_id).exists()
+    if exists:
         raise AlreadyAppliedException(account_id, job_id)
 
     processing = await status_repo.get_by_name("Pending")
@@ -47,24 +46,19 @@ async def start_application(
 
 
 async def submit_answers(application_id: int, answers: Dict[int, str]) -> None:
-    """Persist answers keyed by JobQuestion.id."""
     from bot.models.application import JobAnswer
 
-    objects = [
+    rows = [
         JobAnswer(application_id=application_id, job_question_id=qid, answer=text)
         for qid, text in answers.items()
     ]
-    await answer_repo.bulk_create(objects)
+    await answer_repo.bulk_create(rows)
 
 
 async def update_application_status(
     application_id: int,
     new_status_name: str,
 ) -> JobApplication:
-    """
-    Change status and delegate earning creation to referral_service.
-    Must be idempotent with respect to referral earnings.
-    """
     from bot.services import referral_service
 
     application = await app_repo.get_with_details(application_id)
@@ -111,27 +105,26 @@ def apply_numeric_filters(
     applications: List[JobApplication],
     filters: Dict[int, float],
 ) -> List[JobApplication]:
-    """Filter applications in-memory by minimum value per job_question_id."""
     if not filters:
         return applications
-    result = []
+    out = []
     for app in applications:
-        match = True
+        ok = True
         for jq_id, min_val in filters.items():
             answer = next((a for a in app.answers if a.job_question_id == jq_id), None)
             if answer is None:
-                match = False
+                ok = False
                 break
             try:
                 if float(answer.answer) < min_val:
-                    match = False
+                    ok = False
                     break
             except ValueError:
-                match = False
+                ok = False
                 break
-        if match:
-            result.append(app)
-    return result
+        if ok:
+            out.append(app)
+    return out
 
 
 async def list_user_applications(account_id: int) -> List[JobApplication]:

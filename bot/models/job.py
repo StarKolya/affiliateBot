@@ -20,9 +20,7 @@ class JobPosting(Model):
     )
     title = fields.CharField(max_length=200)
     description = fields.TextField(null=True)
-    # e.g. "active" | "paused" | "closed"
     status = fields.CharField(max_length=15, default="active")
-    # e.g. "full-time" | "part-time" | "contract"
     type = fields.CharField(max_length=15)
     # Primary commission: Deal Closed (partnership) / Joined Team (offer)
     commission = fields.DecimalField(max_digits=8, decimal_places=2, default=0)
@@ -41,7 +39,6 @@ class Question(Model):
     id = fields.IntField(pk=True)
     title = fields.CharField(max_length=100)
     description = fields.CharField(max_length=500)
-    # Expected answer type hint: "text" | "yes_no" | "number"
     expected_answer_type = fields.CharField(max_length=10, default="text")
 
     class Meta:

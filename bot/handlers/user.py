@@ -34,7 +34,6 @@ router = Router(name="user")
 
 
 def _parse_referral_code(args: str | None) -> str | None:
-    """Extracts the code from a deep-link payload like 'ref=abc123'."""
     if args and args.startswith("ref="):
         code = args[4:].strip()
         return code or None
@@ -56,7 +55,6 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot) -> None:
     )
 
     if not created:
-        # Existing user — subscription already verified at registration, skip check
         logger.info("Returning user | telegram_id=%s", tg_user.id)
         await message.answer(
             f"Welcome back, {account.name}!",
@@ -64,7 +62,6 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot) -> None:
         )
         return
 
-    # New user — perform the one-time channel subscription check
     subscribed = await is_channel_member(bot, settings.CHANNEL_ID, tg_user.id)
 
     if subscribed:
@@ -91,7 +88,6 @@ async def callback_check_subscription(callback: CallbackQuery, bot: Bot) -> None
         return
 
     if account.subscription_verified:
-        # Edge case: user pressed the button after already being verified
         await callback.message.delete()
         await callback.message.answer(
             "You already have access!",
@@ -273,8 +269,6 @@ async def fsm_collect_answer(message: Message, state: FSMContext) -> None:
     await message.answer("✅ Your application has been submitted!")
 
 
-# --- Referral links ---
-
 @router.message(F.text == "🔗 Referral Links")
 async def cmd_referral_links(message: Message) -> None:
     await message.answer(
@@ -407,8 +401,6 @@ async def fsm_referral_enter_name(message: Message, state: FSMContext) -> None:
         reply_markup=referral_menu_kb(),
     )
 
-
-# --- Payouts ---
 
 async def _show_payout_menu(target: Message, telegram_id: int, edit: bool = True) -> None:
     account = await user_service.get_by_telegram_id(telegram_id)

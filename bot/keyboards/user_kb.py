@@ -6,10 +6,6 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
 
 def subscription_check_kb(channel_url: Optional[str] = None) -> InlineKeyboardMarkup:
-    """
-    Shown to new users who are not yet subscribed.
-    Optionally includes a direct channel link if CHANNEL_URL is configured.
-    """
     builder = InlineKeyboardBuilder()
     if channel_url:
         builder.button(text="📢 Subscribe to channel", url=channel_url)
@@ -19,7 +15,6 @@ def subscription_check_kb(channel_url: Optional[str] = None) -> InlineKeyboardMa
 
 
 def main_menu_kb() -> ReplyKeyboardMarkup:
-    """Persistent bottom keyboard shown after a user passes the subscription check."""
     builder = ReplyKeyboardBuilder()
     builder.button(text="📋 Browse Jobs")
     builder.button(text="🔗 Referral Links")

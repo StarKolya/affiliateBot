@@ -66,8 +66,6 @@ async def cmd_admin(message: Message) -> None:
     await message.answer("Welcome to the admin panel.", reply_markup=admin_menu_kb())
 
 
-# --- Job management ---
-
 @router.message(F.text == "💼 Jobs")
 @require_admin
 async def cmd_jobs_menu(message: Message) -> None:
@@ -266,8 +264,6 @@ async def callback_admin_cancel(callback: CallbackQuery, state: FSMContext) -> N
     await callback.answer()
 
 
-# --- Application management ---
-
 @router.message(F.text == "📋 Applications")
 @require_admin
 async def cmd_list_applications(message: Message, state: FSMContext) -> None:
@@ -356,8 +352,6 @@ async def _init_browse(
     await _render_applications_page(callback.message, await state.get_data())
 
 
-# --- Page navigation ---
-
 @router.callback_query(F.data == "admin_apps_next")
 @require_admin
 async def callback_apps_next(callback: CallbackQuery, state: FSMContext) -> None:
@@ -382,8 +376,6 @@ async def callback_apps_back(callback: CallbackQuery, state: FSMContext) -> None
     await _render_applications_page(callback.message, await state.get_data())
     await callback.answer()
 
-
-# --- Filters ---
 
 @router.callback_query(F.data == "admin_apps_filters")
 @require_admin
@@ -447,8 +439,6 @@ async def callback_filter_clear(callback: CallbackQuery, state: FSMContext) -> N
     )
     await callback.answer()
 
-
-# --- Shared render ---
 
 async def _render_applications_page(target: Message, data: dict) -> None:
     niche_id = data["niche_id"]
@@ -561,16 +551,12 @@ async def callback_status_noop(callback: CallbackQuery) -> None:
     await callback.answer("Already set to this status.")
 
 
-# --- Jobs menu callback (for back buttons) ---
-
 @router.callback_query(F.data == "admin_jobs_menu")
 @require_admin
 async def callback_jobs_menu(callback: CallbackQuery) -> None:
     await callback.message.edit_text("Job management:", reply_markup=jobs_menu_kb())
     await callback.answer()
 
-
-# --- Job enable / disable ---
 
 @router.callback_query(F.data == "admin_manage_jobs")
 @require_admin
@@ -630,8 +616,6 @@ async def callback_job_toggle_status(callback: CallbackQuery) -> None:
     )
     await callback.answer()
 
-
-# --- Niche management ---
 
 @router.message(F.text == "🏷 Niches")
 @require_admin
@@ -705,8 +689,6 @@ async def callback_niche_delete_confirm(callback: CallbackQuery) -> None:
     await callback.message.edit_text("✅ Niche deleted.", reply_markup=niches_manage_kb(niches))
     await callback.answer()
 
-
-# --- Referrals ---
 
 @router.message(F.text == "🔗 Referrals")
 @require_admin
