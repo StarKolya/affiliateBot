@@ -508,21 +508,13 @@ async def callback_view_application(callback: CallbackQuery) -> None:
         await callback.answer("Application not found.", show_alert=True)
         return
 
-    lines = [
-        f"👤 {app.account.name}",
-        f"💼 {app.job_posting.title}",
-        f"📊 Status: {app.status.name}",
-    ]
+    text = f"👤 {app.account.name}\n💼 {app.job_posting.title}\n📊 Status: {app.status.name}"
 
-    answers = sorted(app.answers, key=lambda a: a.job_question_id)
-    if answers:
-        lines.append("")
-        for answer in answers:
-            lines.append(f"Q: {answer.job_question.question.description}")
-            lines.append(f"A: {answer.answer}")
+    for answer in sorted(app.answers, key=lambda a: a.job_question_id):
+        text += f"\n\nQ: {answer.job_question.question.description}\nA: {answer.answer}"
 
     await callback.message.edit_text(
-        "\n".join(lines),
+        text,
         reply_markup=application_status_kb(app.id, app.status.name, app.job_posting.type),
     )
     await callback.answer()
@@ -694,15 +686,15 @@ async def callback_niche_delete_confirm(callback: CallbackQuery) -> None:
 @require_admin
 async def cmd_referrals_menu(message: Message) -> None:
     overview = await referral_service.get_admin_overview()
-    await message.answer(
+    text = (
         f"🔗 <b>Referral Overview</b>\n\n"
         f"👤 Referrers: {overview['total_referrers']}\n"
         f"👥 Referred users: {overview['total_referred']}\n"
         f"📝 Applications via referral: {overview['total_applications']}\n"
         f"💰 Total earned: ${overview['total_earned']:.2f}\n"
-        f"⏳ Pending payouts: {overview['pending_payout_count']} (${overview['pending_payout_amount']:.2f})",
-        reply_markup=referrals_menu_kb(),
+        f"⏳ Pending payouts: {overview['pending_payout_count']} (${overview['pending_payout_amount']:.2f})"
     )
+    await message.answer(text, reply_markup=referrals_menu_kb())
 
 
 @router.callback_query(F.data == "admin_referrals_menu")
@@ -741,7 +733,10 @@ async def _show_referrers_page(target: Message, page: int) -> None:
     total_pages = max(1, -(-len(accounts) // REFERRERS_PAGE_SIZE))
     page = min(page, total_pages - 1)
     page_accounts = accounts[page * REFERRERS_PAGE_SIZE:(page + 1) * REFERRERS_PAGE_SIZE]
-    text = f"👥 <b>All Referrers</b>  (page {page + 1}/{total_pages})" if accounts else "👥 <b>All Referrers</b>\n\nNo referrers yet."
+    if accounts:
+        text = f"👥 <b>All Referrers</b>  (page {page + 1}/{total_pages})"
+    else:
+        text = "👥 <b>All Referrers</b>\n\nNo referrers yet."
     await target.edit_text(text, reply_markup=referrers_list_kb(page_accounts, page, total_pages))
 
 

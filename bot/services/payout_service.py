@@ -59,7 +59,7 @@ async def reject_payout(payout_id: int, admin_note: Optional[str] = None) -> Pay
     payout = await PayoutRequest.get(id=payout_id)
     payout.status = "rejected"
     payout.admin_note = admin_note
-    await payout.save(update_fields=["status", "admin_note", "updated_at"])
+    await payout.save()
     logger.info("Payout rejected | id=%s", payout_id)
     return payout
 

@@ -13,8 +13,22 @@ The owner actively looks for new people in his team and the bot automates the hi
 As a good programming practice layer architecture is used. 
 All the code is divided into parts:
 * models -> definition of tables in DB 
-* repositories -> communication with the DB
-
+* repositories -> communication with the DB through ORM
+* services -> actual business logic
+* utils -> utility functions
 * handlers -> the main flow of the app (divided into user and admin)
 * keyboards -> predefined built buttons that are later being appended to the messages 
+
+The separations ensures independetness of the functional parts and improves code readability 
+
+## Tech stack 
+
+* aiogram — async Telegram bot framework, previously used Telebot, this one is slightly more complex but is also more flexible
+* Tortoise ORM — async ORM
+* Aerich — database migration tool for Tortoise
+* MySQL — relational database needed to store the strucutred data
+* pydantic-settings — typed config loaded from .env
+
+
+## Functionality description 
 

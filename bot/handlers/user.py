@@ -1,3 +1,4 @@
+import math
 from decimal import Decimal, InvalidOperation
 
 from aiogram import Bot, F, Router
@@ -325,14 +326,14 @@ async def callback_referral_page(callback: CallbackQuery) -> None:
 async def _show_links_page(target: Message, telegram_id: int, page: int) -> None:
     account = await user_service.get_by_telegram_id(telegram_id)
     links = await referral_service.list_user_referrals(account.id)
-    total_pages = max(1, -(-len(links) // REFERRAL_PAGE_SIZE))
+    total_pages = max(1, math.ceil(len(links) / REFERRAL_PAGE_SIZE))
     page = min(page, total_pages - 1)
     page_links = links[page * REFERRAL_PAGE_SIZE:(page + 1) * REFERRAL_PAGE_SIZE]
 
     counts: dict = {}
     if page_links:
         rows = await JobApplication.filter(
-            referral_id__in=[l.id for l in page_links]
+            referral_id__in=[link.id for link in page_links]
         ).values("referral_id")
         for row in rows:
             rid = row["referral_id"]
@@ -445,7 +446,7 @@ async def callback_payout_history_page(callback: CallbackQuery) -> None:
 async def _show_payout_history_page(target: Message, telegram_id: int, page: int) -> None:
     account = await user_service.get_by_telegram_id(telegram_id)
     payouts = await payout_service.list_user_payouts(account.id)
-    total_pages = max(1, -(-len(payouts) // PAYOUT_HISTORY_PAGE_SIZE))
+    total_pages = max(1, math.ceil(len(payouts) / PAYOUT_HISTORY_PAGE_SIZE))
     page = min(page, total_pages - 1)
     page_payouts = payouts[page * PAYOUT_HISTORY_PAGE_SIZE:(page + 1) * PAYOUT_HISTORY_PAGE_SIZE]
 

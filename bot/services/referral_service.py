@@ -69,13 +69,13 @@ async def get_account_stats(account_id: int) -> AccountReferralStats:
     referrals = await referral_repo.get_by_account(account_id)
     codes = [r.code for r in referrals]
     total_referred = await Account.filter(referred_by_code__in=codes).count() if codes else 0
-    base = JobApplication.filter(referral__account_id=account_id)
-    total_applications = await base.count()
-    total_pending = await base.filter(status__name="Pending").count()
-    total_declined = await base.filter(status__name="Declined").count()
-    total_deal_closed = await base.filter(status__name="Deal Closed").count()
-    total_joined_team = await base.filter(status__name="Joined Team").count()
-    total_bought_course = await base.filter(status__name="Bought Course").count()
+    qs = JobApplication.filter(referral__account_id=account_id)
+    total_applications = await qs.count()
+    total_pending = await qs.filter(status__name="Pending").count()
+    total_declined = await qs.filter(status__name="Declined").count()
+    total_deal_closed = await qs.filter(status__name="Deal Closed").count()
+    total_joined_team = await qs.filter(status__name="Joined Team").count()
+    total_bought_course = await qs.filter(status__name="Bought Course").count()
     total_earned = await earning_repo.get_total_earned(account_id)
     return AccountReferralStats(
         total_referred=total_referred,
@@ -91,13 +91,13 @@ async def get_account_stats(account_id: int) -> AccountReferralStats:
 
 async def get_referral_stats(referral: Referral) -> ReferralStats:
     referred_users = await Account.filter(referred_by_code=referral.code).count()
-    base = JobApplication.filter(referral_id=referral.id)
-    applications = await base.count()
-    pending = await base.filter(status__name="Pending").count()
-    declined = await base.filter(status__name="Declined").count()
-    deal_closed = await base.filter(status__name="Deal Closed").count()
-    joined_team = await base.filter(status__name="Joined Team").count()
-    bought_course = await base.filter(status__name="Bought Course").count()
+    qs = JobApplication.filter(referral_id=referral.id)
+    applications = await qs.count()
+    pending = await qs.filter(status__name="Pending").count()
+    declined = await qs.filter(status__name="Declined").count()
+    deal_closed = await qs.filter(status__name="Deal Closed").count()
+    joined_team = await qs.filter(status__name="Joined Team").count()
+    bought_course = await qs.filter(status__name="Bought Course").count()
     earned = await earning_repo.get_earned_by_referral(referral.id)
     return ReferralStats(
         referral=referral,
@@ -129,8 +129,7 @@ async def maybe_create_earning(
     if amount <= 0:
         return None
 
-    already = await earning_repo.earning_exists(referral_id, application_id)
-    if already:
+    if await earning_repo.earning_exists(referral_id, application_id):
         return None
 
     earning = await earning_repo.create(
