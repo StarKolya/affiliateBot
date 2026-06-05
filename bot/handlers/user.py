@@ -6,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from bot.config import settings
+from bot.exceptions import AlreadyAppliedException
 from bot.models.application import JobApplication
 from bot.handlers.states import ApplyStates, CreateReferralStates, RequestPayoutStates
 from bot.keyboards.user_kb import (
@@ -204,7 +205,7 @@ async def callback_apply(callback: CallbackQuery, state: FSMContext) -> None:
                 job_id=job_id,
                 referred_by_code=account.referred_by_code,
             )
-        except ValueError:
+        except AlreadyAppliedException:
             await callback.answer("You have already applied for this job.", show_alert=True)
             return
         await callback.message.edit_text("✅ Your application has been submitted!")
@@ -265,7 +266,7 @@ async def fsm_collect_answer(message: Message, state: FSMContext) -> None:
             application_id=application.id,
             answers={int(k): v for k, v in answers.items()},
         )
-    except ValueError:
+    except AlreadyAppliedException:
         await message.answer("You have already applied for this job.")
         return
 

@@ -1,3 +1,4 @@
+import functools
 import re
 
 from aiogram import F, Router
@@ -46,6 +47,7 @@ router = Router(name="admin")
 
 
 def require_admin(func):
+    @functools.wraps(func)
     async def wrapper(*args, **kwargs):
         event = args[0]
         user = getattr(event, "from_user", None)

@@ -6,6 +6,7 @@ from bot.repositories.application_repository import (
     JobAnswerRepository,
     JobApplicationRepository,
 )
+from bot.exceptions import AlreadyAppliedException
 from bot.repositories.referral_repository import ReferralRepository
 from bot.utils.logger import get_logger
 
@@ -25,7 +26,7 @@ async def start_application(
     """Create a new application in default 'Processing' status."""
     already = await app_repo.model.filter(account_id=account_id, job_posting_id=job_id).exists()
     if already:
-        raise ValueError("already_applied")
+        raise AlreadyAppliedException(account_id, job_id)
 
     processing = await status_repo.get_by_name("Pending")
     if processing is None:
