@@ -25,7 +25,6 @@ class ReferralEarningRepository(BaseRepository[ReferralEarning]):
         return await ReferralEarning.filter(referral_id=referral_id)
 
     async def earning_exists(self, referral_id: int, application_id: int) -> bool:
-        """Used for idempotency check before creating an earning."""
         return await ReferralEarning.filter(
             referral_id=referral_id, application_id=application_id
         ).exists()

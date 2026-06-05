@@ -1,4 +1,3 @@
-import functools
 import logging
 import time
 from typing import Generic, List, Optional, Type, TypeVar
@@ -11,14 +10,11 @@ _log = logging.getLogger(__name__)
 
 
 def log_query(func):
-    """Decorator that logs the execution time of async repository methods."""
-    @functools.wraps(func)
     async def wrapper(*args, **kwargs):
         start = time.monotonic()
         result = await func(*args, **kwargs)
         _log.debug(
-            "%s.%s completed in %.3fs",
-            args[0].__class__.__name__,
+            "%s completed in %.3fs",
             func.__name__,
             time.monotonic() - start,
         )
