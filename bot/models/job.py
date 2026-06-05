@@ -3,8 +3,6 @@ from tortoise.models import Model
 
 
 class Niche(Model):
-    """Top-level category / area (was JobLabel in original SQL)."""
-
     id = fields.IntField(pk=True)
     name = fields.CharField(max_length=50, unique=True)
 
@@ -40,8 +38,6 @@ class JobPosting(Model):
 
 
 class Question(Model):
-    """Predefined question bank. Questions are never job-specific until assigned."""
-
     id = fields.IntField(pk=True)
     title = fields.CharField(max_length=100)
     description = fields.CharField(max_length=500)
@@ -56,7 +52,6 @@ class Question(Model):
 
 
 class JobQuestion(Model):
-    """M2M join: which questions are assigned to a specific job posting."""
 
     id = fields.IntField(pk=True)
     job_posting: fields.ForeignKeyRelation[JobPosting] = fields.ForeignKeyField(

@@ -20,10 +20,6 @@ class Referral(Model):
 
 
 class ReferralEarning(Model):
-    """
-    Created once per (referral, application) pair when a trigger status is reached.
-    The unique_together constraint enforces idempotency at the DB level.
-    """
 
     id = fields.IntField(pk=True)
     referral: fields.ForeignKeyRelation[Referral] = fields.ForeignKeyField(

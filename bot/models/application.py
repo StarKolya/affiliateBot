@@ -3,8 +3,6 @@ from tortoise.models import Model
 
 
 class ApplicationStatus(Model):
-    """Lookup table – seed with: Not accepted / Processing / Bought training / Joined team."""
-
     id = fields.IntField(pk=True)
     name = fields.CharField(max_length=30, unique=True)
 
@@ -26,7 +24,6 @@ class JobApplication(Model):
     status: fields.ForeignKeyRelation[ApplicationStatus] = fields.ForeignKeyField(
         "models.ApplicationStatus", related_name="applications", on_delete=fields.RESTRICT
     )
-    # Nullable: application may not come through a referral link
     referral: fields.ForeignKeyNullableRelation = fields.ForeignKeyField(
         "models.Referral", related_name="applications", null=True, on_delete=fields.SET_NULL
     )
