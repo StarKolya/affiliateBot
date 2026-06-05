@@ -1,10 +1,11 @@
+import re
+
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, FSInputFile, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot.filters import IsAdmin
 from bot.handlers.states import CreateJobStates, CreateNicheStates, FilterApplicationsStates
 from bot.keyboards.admin_kb import (
     APPS_PAGE_SIZE,
@@ -39,12 +40,26 @@ from bot.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+_COMMISSION_RE = re.compile(r"^\d{1,7}([.,]\d{1,2})?$")
+
 router = Router(name="admin")
-router.message.filter(IsAdmin())
-router.callback_query.filter(IsAdmin())
+
+
+def require_admin(func):
+    async def wrapper(*args, **kwargs):
+        event = args[0]
+        user = getattr(event, "from_user", None)
+        if user is None:
+            return
+        account = await Account.get_or_none(telegram_id=user.id).prefetch_related("role")
+        if account is None or account.role.name != "admin":
+            return
+        return await func(*args, **kwargs)
+    return wrapper
 
 
 @router.message(Command("admin"))
+@require_admin
 async def cmd_admin(message: Message) -> None:
     await message.answer("Welcome to the admin panel.", reply_markup=admin_menu_kb())
 
@@ -52,11 +67,13 @@ async def cmd_admin(message: Message) -> None:
 # --- Job management ---
 
 @router.message(F.text == "💼 Jobs")
+@require_admin
 async def cmd_jobs_menu(message: Message) -> None:
     await message.answer("Job management:", reply_markup=jobs_menu_kb())
 
 
 @router.callback_query(F.data == "admin_create_job")
+@require_admin
 async def callback_create_job(callback: CallbackQuery, state: FSMContext) -> None:
     niches = await job_service.list_all_niches()
     if not niches:
@@ -68,6 +85,7 @@ async def callback_create_job(callback: CallbackQuery, state: FSMContext) -> Non
 
 
 @router.callback_query(CreateJobStates.select_niche, F.data.startswith("admin_niche:"))
+@require_admin
 async def fsm_select_niche(callback: CallbackQuery, state: FSMContext) -> None:
     niche_id = int(callback.data.split(":")[1])
     await state.update_data(niche_id=niche_id)
@@ -77,6 +95,7 @@ async def fsm_select_niche(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.message(CreateJobStates.enter_title)
+@require_admin
 async def fsm_enter_title(message: Message, state: FSMContext) -> None:
     await state.update_data(title=message.text)
     await state.set_state(CreateJobStates.select_type)
@@ -84,6 +103,7 @@ async def fsm_enter_title(message: Message, state: FSMContext) -> None:
 
 
 @router.callback_query(CreateJobStates.select_type, F.data.startswith("admin_job_type:"))
+@require_admin
 async def fsm_select_type(callback: CallbackQuery, state: FSMContext) -> None:
     job_type = callback.data.split(":")[1]
     await state.update_data(job_type=job_type)
@@ -95,6 +115,7 @@ async def fsm_select_type(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.message(CreateJobStates.enter_description)
+@require_admin
 async def fsm_enter_description(message: Message, state: FSMContext) -> None:
     await state.update_data(description=message.text)
     await state.set_state(CreateJobStates.enter_commission)
@@ -102,6 +123,7 @@ async def fsm_enter_description(message: Message, state: FSMContext) -> None:
 
 
 @router.callback_query(CreateJobStates.enter_description, F.data == "admin_skip")
+@require_admin
 async def fsm_skip_description(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(description=None)
     await state.set_state(CreateJobStates.enter_commission)
@@ -110,12 +132,12 @@ async def fsm_skip_description(callback: CallbackQuery, state: FSMContext) -> No
 
 
 @router.message(CreateJobStates.enter_commission)
+@require_admin
 async def fsm_enter_commission(message: Message, state: FSMContext) -> None:
-    try:
-        commission = float(message.text.replace(",", "."))
-    except ValueError:
-        await message.answer("Please enter a valid number (e.g. 500 or 250.50):")
+    if not _COMMISSION_RE.match(message.text.strip()):
+        await message.answer("Invalid format. Enter a number like 500 or 250.50:")
         return
+    commission = float(message.text.strip().replace(",", "."))
 
     await state.update_data(commission=commission)
     data = await state.get_data()
@@ -131,6 +153,7 @@ async def fsm_enter_commission(message: Message, state: FSMContext) -> None:
 
 
 @router.callback_query(CreateJobStates.enter_commission_secondary, F.data == "admin_skip")
+@require_admin
 async def fsm_skip_commission_secondary(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(commission_secondary=None)
     await _show_question_select(callback.message, state)
@@ -138,12 +161,12 @@ async def fsm_skip_commission_secondary(callback: CallbackQuery, state: FSMConte
 
 
 @router.message(CreateJobStates.enter_commission_secondary)
+@require_admin
 async def fsm_enter_commission_secondary(message: Message, state: FSMContext) -> None:
-    try:
-        commission_secondary = float(message.text.replace(",", "."))
-    except ValueError:
-        await message.answer("Please enter a valid number or tap Skip:")
+    if not _COMMISSION_RE.match(message.text.strip()):
+        await message.answer("Invalid format. Enter a number like 500 or 250.50, or tap Skip:")
         return
+    commission_secondary = float(message.text.strip().replace(",", "."))
     await state.update_data(commission_secondary=commission_secondary)
     await _show_question_select(message, state)
 
@@ -186,6 +209,7 @@ async def _finish_create_job(target: Message, state: FSMContext, selected_ids: l
 
 
 @router.callback_query(CreateJobStates.select_questions, F.data.startswith("admin_q_toggle:"))
+@require_admin
 async def fsm_toggle_question(callback: CallbackQuery, state: FSMContext) -> None:
     question_id = int(callback.data.split(":")[1])
     data = await state.get_data()
@@ -207,6 +231,7 @@ async def fsm_toggle_question(callback: CallbackQuery, state: FSMContext) -> Non
 
 
 @router.callback_query(CreateJobStates.select_questions, F.data.startswith("admin_q_page:"))
+@require_admin
 async def fsm_question_page(callback: CallbackQuery, state: FSMContext) -> None:
     page = int(callback.data.split(":")[1])
     await state.update_data(question_page=page)
@@ -223,6 +248,7 @@ async def fsm_question_page(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(CreateJobStates.select_questions, F.data == "admin_q_confirm")
+@require_admin
 async def fsm_confirm_questions(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     selected_ids = data.get("selected_question_ids", [])
@@ -231,6 +257,7 @@ async def fsm_confirm_questions(callback: CallbackQuery, state: FSMContext) -> N
 
 
 @router.callback_query(F.data == "admin_cancel")
+@require_admin
 async def callback_admin_cancel(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     await callback.message.edit_text("Cancelled.")
@@ -240,12 +267,14 @@ async def callback_admin_cancel(callback: CallbackQuery, state: FSMContext) -> N
 # --- Application management ---
 
 @router.message(F.text == "📋 Applications")
+@require_admin
 async def cmd_list_applications(message: Message, state: FSMContext) -> None:
     await state.clear()
     await _show_niche_picker(message)
 
 
 @router.callback_query(F.data == "admin_list_applications")
+@require_admin
 async def callback_list_applications(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     niches = await job_service.list_all_niches()
@@ -274,6 +303,7 @@ async def _show_niche_picker(target: Message) -> None:
 
 
 @router.callback_query(F.data.startswith("admin_apps_niche:"))
+@require_admin
 async def callback_apps_by_niche(callback: CallbackQuery, state: FSMContext) -> None:
     niche_id = int(callback.data.split(":")[1])
     jobs = await job_service.list_jobs_by_niche(niche_id)
@@ -293,6 +323,7 @@ async def callback_apps_by_niche(callback: CallbackQuery, state: FSMContext) -> 
 
 
 @router.callback_query(F.data.startswith("admin_apps_job:"))
+@require_admin
 async def callback_apps_by_job(callback: CallbackQuery, state: FSMContext) -> None:
     parts = callback.data.split(":")
     job_id_raw, niche_id = parts[1], int(parts[2])
@@ -326,6 +357,7 @@ async def _init_browse(
 # --- Page navigation ---
 
 @router.callback_query(F.data == "admin_apps_next")
+@require_admin
 async def callback_apps_next(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     await state.update_data(page=data["page"] + 1)
@@ -334,6 +366,7 @@ async def callback_apps_next(callback: CallbackQuery, state: FSMContext) -> None
 
 
 @router.callback_query(F.data == "admin_apps_prev")
+@require_admin
 async def callback_apps_prev(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     await state.update_data(page=max(0, data["page"] - 1))
@@ -342,6 +375,7 @@ async def callback_apps_prev(callback: CallbackQuery, state: FSMContext) -> None
 
 
 @router.callback_query(F.data == "admin_apps_back")
+@require_admin
 async def callback_apps_back(callback: CallbackQuery, state: FSMContext) -> None:
     await _render_applications_page(callback.message, await state.get_data())
     await callback.answer()
@@ -350,6 +384,7 @@ async def callback_apps_back(callback: CallbackQuery, state: FSMContext) -> None
 # --- Filters ---
 
 @router.callback_query(F.data == "admin_apps_filters")
+@require_admin
 async def callback_show_filters(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     numeric_questions = data.get("numeric_questions", [])
@@ -364,6 +399,7 @@ async def callback_show_filters(callback: CallbackQuery, state: FSMContext) -> N
 
 
 @router.callback_query(F.data.startswith("admin_filter_set:"))
+@require_admin
 async def callback_filter_set(callback: CallbackQuery, state: FSMContext) -> None:
     jq_id = int(callback.data.split(":")[1])
     await state.set_state(FilterApplicationsStates.entering_filter)
@@ -377,6 +413,7 @@ async def callback_filter_set(callback: CallbackQuery, state: FSMContext) -> Non
 
 
 @router.message(FilterApplicationsStates.entering_filter)
+@require_admin
 async def fsm_enter_filter_value(message: Message, state: FSMContext) -> None:
     try:
         min_val = float(message.text.replace(",", "."))
@@ -398,6 +435,7 @@ async def fsm_enter_filter_value(message: Message, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data == "admin_filter_clear")
+@require_admin
 async def callback_filter_clear(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(filters={}, page=0)
     data = await state.get_data()
@@ -438,7 +476,39 @@ async def _render_applications_page(target: Message, data: dict) -> None:
     )
 
 
+@router.callback_query(F.data == "admin_apps_export")
+@require_admin
+async def callback_export_applications(callback: CallbackQuery, state: FSMContext) -> None:
+    from bot.utils.export import export_applications_csv
+
+    data = await state.get_data()
+    niche_id = data.get("niche_id")
+    job_id = data.get("job_id")
+    filters = {int(k): v for k, v in data.get("filters", {}).items()}
+
+    if job_id is not None:
+        applications = await application_service.list_applications_by_job(job_id)
+        applications = application_service.apply_numeric_filters(applications, filters)
+    elif niche_id is not None:
+        applications = await application_service.list_applications_by_niche(niche_id)
+    else:
+        await callback.answer("No selection context found.", show_alert=True)
+        return
+
+    if not applications:
+        await callback.answer("No applications to export.", show_alert=True)
+        return
+
+    path = export_applications_csv(applications)
+    await callback.message.answer_document(
+        FSInputFile(path),
+        caption=f"Exported {len(applications)} application(s).",
+    )
+    await callback.answer()
+
+
 @router.callback_query(F.data.startswith("admin_app:"))
+@require_admin
 async def callback_view_application(callback: CallbackQuery) -> None:
     application_id = int(callback.data.split(":")[1])
     app = await application_service.get_application(application_id)
@@ -467,6 +537,7 @@ async def callback_view_application(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data.startswith("app_status:"))
+@require_admin
 async def callback_update_status(callback: CallbackQuery) -> None:
     _, app_id, *status_parts = callback.data.split(":")
     new_status = ":".join(status_parts)
@@ -483,6 +554,7 @@ async def callback_update_status(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == "app_status_noop")
+@require_admin
 async def callback_status_noop(callback: CallbackQuery) -> None:
     await callback.answer("Already set to this status.")
 
@@ -490,6 +562,7 @@ async def callback_status_noop(callback: CallbackQuery) -> None:
 # --- Jobs menu callback (for back buttons) ---
 
 @router.callback_query(F.data == "admin_jobs_menu")
+@require_admin
 async def callback_jobs_menu(callback: CallbackQuery) -> None:
     await callback.message.edit_text("Job management:", reply_markup=jobs_menu_kb())
     await callback.answer()
@@ -498,6 +571,7 @@ async def callback_jobs_menu(callback: CallbackQuery) -> None:
 # --- Job enable / disable ---
 
 @router.callback_query(F.data == "admin_manage_jobs")
+@require_admin
 async def callback_manage_jobs(callback: CallbackQuery) -> None:
     niches = await job_service.list_all_niches()
     if not niches:
@@ -508,6 +582,7 @@ async def callback_manage_jobs(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data.startswith("admin_manage_jobs_niche:"))
+@require_admin
 async def callback_manage_jobs_niche(callback: CallbackQuery) -> None:
     niche_id = int(callback.data.split(":")[1])
     jobs = await job_service.list_all_jobs_by_niche(niche_id)
@@ -525,6 +600,7 @@ _STATUS_LABEL = {"active": "🟢 Active", "paused": "🟡 Paused", "closed": "�
 
 
 @router.callback_query(F.data.startswith("admin_manage_job:"))
+@require_admin
 async def callback_manage_job_detail(callback: CallbackQuery) -> None:
     parts = callback.data.split(":")
     job_id, niche_id = int(parts[1]), int(parts[2])
@@ -538,6 +614,7 @@ async def callback_manage_job_detail(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data.startswith("admin_job_toggle:"))
+@require_admin
 async def callback_job_toggle_status(callback: CallbackQuery) -> None:
     parts = callback.data.split(":")
     job_id, niche_id = int(parts[1]), int(parts[2])
@@ -555,12 +632,14 @@ async def callback_job_toggle_status(callback: CallbackQuery) -> None:
 # --- Niche management ---
 
 @router.message(F.text == "🏷 Niches")
+@require_admin
 async def cmd_niches_menu(message: Message) -> None:
     niches = await job_service.list_all_niches()
     await message.answer("Niche management:", reply_markup=niches_manage_kb(niches))
 
 
 @router.callback_query(F.data == "admin_niches_menu")
+@require_admin
 async def callback_niches_menu(callback: CallbackQuery) -> None:
     niches = await job_service.list_all_niches()
     await callback.message.edit_text("Niche management:", reply_markup=niches_manage_kb(niches))
@@ -568,6 +647,7 @@ async def callback_niches_menu(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == "admin_create_niche")
+@require_admin
 async def callback_create_niche(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(CreateNicheStates.enter_name)
     await callback.message.edit_text("Enter the niche name:")
@@ -575,6 +655,7 @@ async def callback_create_niche(callback: CallbackQuery, state: FSMContext) -> N
 
 
 @router.message(CreateNicheStates.enter_name)
+@require_admin
 async def fsm_enter_niche_name(message: Message, state: FSMContext) -> None:
     name = message.text.strip()
     await job_service.create_niche(name)
@@ -584,6 +665,7 @@ async def fsm_enter_niche_name(message: Message, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data.startswith("admin_niche_detail:"))
+@require_admin
 async def callback_niche_detail(callback: CallbackQuery) -> None:
     niche_id = int(callback.data.split(":")[1])
     niche = await job_service.get_niche(niche_id)
@@ -596,6 +678,7 @@ async def callback_niche_detail(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data.startswith("admin_niche_delete:"))
+@require_admin
 async def callback_niche_delete(callback: CallbackQuery) -> None:
     niche_id = int(callback.data.split(":")[1])
     job_count = await job_service.count_jobs_by_niche(niche_id)
@@ -612,6 +695,7 @@ async def callback_niche_delete(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data.startswith("admin_niche_delete_confirm:"))
+@require_admin
 async def callback_niche_delete_confirm(callback: CallbackQuery) -> None:
     niche_id = int(callback.data.split(":")[1])
     await job_service.delete_niche(niche_id)
@@ -623,6 +707,7 @@ async def callback_niche_delete_confirm(callback: CallbackQuery) -> None:
 # --- Referrals ---
 
 @router.message(F.text == "🔗 Referrals")
+@require_admin
 async def cmd_referrals_menu(message: Message) -> None:
     overview = await referral_service.get_admin_overview()
     await message.answer(
@@ -637,6 +722,7 @@ async def cmd_referrals_menu(message: Message) -> None:
 
 
 @router.callback_query(F.data == "admin_referrals_menu")
+@require_admin
 async def callback_referrals_menu(callback: CallbackQuery) -> None:
     overview = await referral_service.get_admin_overview()
     await callback.message.edit_text(
@@ -652,12 +738,14 @@ async def callback_referrals_menu(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == "admin_all_referrers")
+@require_admin
 async def callback_all_referrers(callback: CallbackQuery) -> None:
     await _show_referrers_page(callback.message, page=0)
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("admin_referrers_page:"))
+@require_admin
 async def callback_referrers_page(callback: CallbackQuery) -> None:
     page = int(callback.data.split(":")[1])
     await _show_referrers_page(callback.message, page=page)
@@ -674,6 +762,7 @@ async def _show_referrers_page(target: Message, page: int) -> None:
 
 
 @router.callback_query(F.data.startswith("admin_referrer:"))
+@require_admin
 async def callback_referrer_detail(callback: CallbackQuery) -> None:
     account_id = int(callback.data.split(":")[1])
     account = await Account.get_or_none(id=account_id)
@@ -700,12 +789,14 @@ async def callback_referrer_detail(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == "admin_finance")
+@require_admin
 async def callback_finance(callback: CallbackQuery) -> None:
     await _show_finance_page(callback.message, page=0)
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("admin_finance_page:"))
+@require_admin
 async def callback_finance_page(callback: CallbackQuery) -> None:
     page = int(callback.data.split(":")[1])
     await _show_finance_page(callback.message, page=page)
@@ -722,6 +813,7 @@ async def _show_finance_page(target: Message, page: int) -> None:
 
 
 @router.callback_query(F.data.startswith("admin_payout:"))
+@require_admin
 async def callback_payout_detail(callback: CallbackQuery) -> None:
     payout_id = int(callback.data.split(":")[1])
     payouts = await payout_service.list_pending_payouts()
@@ -740,6 +832,7 @@ async def callback_payout_detail(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data.startswith("admin_payout_approve:"))
+@require_admin
 async def callback_payout_approve(callback: CallbackQuery) -> None:
     payout_id = int(callback.data.split(":")[1])
     await payout_service.approve_payout(payout_id)
@@ -748,6 +841,7 @@ async def callback_payout_approve(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data.startswith("admin_payout_reject:"))
+@require_admin
 async def callback_payout_reject(callback: CallbackQuery) -> None:
     payout_id = int(callback.data.split(":")[1])
     await payout_service.reject_payout(payout_id)
