@@ -8,7 +8,7 @@ from aiogram.enums import ParseMode
 from bot.config import settings
 from bot.db import close_db, init_db, seed_initial_data
 from bot.handlers import build_main_router
-from bot.middlewares import ErrorHandlerMiddleware, SubscriptionMiddleware
+from bot.middlewares import ErrorHandlerMiddleware, SubscriptionMiddleware, TimingMiddleware
 from bot.scheduler import build_scheduler
 from bot.utils import setup_logging
 
@@ -32,6 +32,9 @@ async def main() -> None:
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     dp = Dispatcher()
+
+    # Outermost: timing (measures total time including all inner middleware + handler)
+    dp.update.outer_middleware(TimingMiddleware())
 
     # Global error handler wraps all updates
     dp.update.outer_middleware(ErrorHandlerMiddleware())

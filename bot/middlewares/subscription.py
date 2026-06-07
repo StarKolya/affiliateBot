@@ -85,9 +85,18 @@ class SubscriptionMiddleware(BaseMiddleware):
         # Check cache first
         cached = _cached_result(user.id)
         if cached is True:
+            logger.debug("Subscription cache hit | user=%s", user.id)
             return await handler(event, data)
 
+        t0 = time.monotonic()
         is_member = await is_subscribed_to_all(bot, _channel_ids(), user.id)
+        elapsed_ms = (time.monotonic() - t0) * 1000
+        logger.info(
+            "Subscription check done | user=%s is_member=%s elapsed_ms=%.1f",
+            user.id,
+            is_member,
+            elapsed_ms,
+        )
         _set_cache(user.id, is_member)
 
         if is_member:
