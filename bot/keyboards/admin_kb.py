@@ -248,7 +248,7 @@ def applications_page_kb(
 
     nav = []
     if page > 0:
-        nav.append(("◀️ Назад", "admin_apps_prev"))
+        nav.append(("◀️", "admin_apps_prev"))
     filter_label = "🔍 Фильтры ●" if has_filters else "🔍 Фильтры"
     nav.append((filter_label, "admin_apps_filters"))
     sort_label = "↕️ Сортировка ●" if has_sort else "↕️ Сортировка"
@@ -256,7 +256,7 @@ def applications_page_kb(
     status_label = "🏷 Статус ●" if has_status_filter else "🏷 Статус"
     nav.append((status_label, "admin_apps_status_filter"))
     if page < total_pages - 1:
-        nav.append(("Вперёд ▶️", "admin_apps_next"))
+        nav.append(("▶️", "admin_apps_next"))
 
     for text, cb in nav:
         builder.button(text=text, callback_data=cb)
@@ -319,7 +319,7 @@ def application_status_kb(application_id: int, current_status: str, job_type: st
     for status in statuses:
         display = _STATUS_DISPLAY_RU.get(status, status)
         builder.button(text=display, callback_data=f"app_status:{application_id}:{status}")
-    builder.button(text="⬅️ Назад", callback_data="admin_list_applications")
+    builder.button(text="⬅️ К откликам", callback_data="admin_apps_back")
     builder.adjust(1)
     return builder.as_markup()
 

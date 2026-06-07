@@ -342,13 +342,14 @@ async def _init_browse(
                 for jq in sorted(job.job_questions, key=lambda jq: jq.order)
                 if jq.question.expected_answer_type == "number"
             ]
+    all_statuses = list(_STATUS_DISPLAY_RU.keys())
     await state.update_data(
         niche_id=niche_id,
         job_id=job_id,
         numeric_questions=numeric_questions,
         page=0,
         filters={},
-        status_filter=[],
+        status_filter=[s for s in all_statuses if s != "Declined"],
     )
     await _render_applications_page(callback.message, await state.get_data())
 
