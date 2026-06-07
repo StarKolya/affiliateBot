@@ -1239,15 +1239,27 @@ async def callback_marketing_create(callback: CallbackQuery, state: FSMContext) 
     if await _get_role(callback.from_user.id) not in _SUPERADMIN_ROLES:
         await callback.answer("Нет доступа.", show_alert=True)
         return
-    await state.set_state(CreateMarketingStates.waiting_for_message)
+    await state.set_state(CreateMarketingStates.waiting_for_name)
     await callback.message.edit_text(
         "✉️ <b>Новая рассылка</b>\n\n"
-        "Перешлите или отправьте подготовленное сообщение.\n"
-        "Поддерживаются: текст, фото, видео, GIF, стикер, документ, аудио, голосовое.\n"
-        "Все стили (жирный, курсив, эмодзи и пр.) сохранятся.",
+        "Введите название рассылки:",
         reply_markup=marketing_cancel_kb(),
     )
     await callback.answer()
+
+
+@router.message(CreateMarketingStates.waiting_for_name)
+async def fsm_marketing_receive_name(message: Message, state: FSMContext) -> None:
+    name = (message.text or "").strip()
+    if not name:
+        await message.answer("❌ Название не может быть пустым. Введите название:", reply_markup=marketing_cancel_kb())
+        return
+    await state.update_data(name=name)
+    await state.set_state(CreateMarketingStates.waiting_for_message)
+    await message.answer(
+        "📨 Перешлите или отправьте подготовленное сообщение для рассылки:",
+        reply_markup=marketing_cancel_kb(),
+    )
 
 
 @router.message(CreateMarketingStates.waiting_for_message)
@@ -1260,38 +1272,16 @@ async def fsm_marketing_receive_message(message: Message, state: FSMContext) -> 
         )
         return
 
+    fsm_data = await state.get_data()
+    data["name"] = fsm_data.get("name", "")
     msg_obj = await MarketingMessage.create(**data)
     await state.clear()
 
-    preview = _marketing_preview_text(msg_obj)
     await message.answer(
-        f"👁 <b>Предпросмотр сохранён:</b>\n\n{preview}\n\n"
-        "Перейдите в меню рассылки, чтобы разослать или удалить.",
+        f"✅ Рассылка <b>{msg_obj.name}</b> сохранена.\n\n",
         reply_markup=marketing_detail_kb(msg_obj.id, already_sent=False),
     )
 
-
-def _marketing_preview_text(msg: MarketingMessage) -> str:
-    type_label = {
-        "text": "📝 Текст",
-        "photo": "🖼 Фото",
-        "video": "🎬 Видео",
-        "animation": "🎞 GIF",
-        "sticker": "🎭 Стикер",
-        "document": "📎 Документ",
-        "audio": "🎵 Аудио",
-        "voice": "🎤 Голосовое",
-    }.get(msg.content_type, msg.content_type)
-
-    lines = [f"Тип: {type_label}"]
-    if msg.text:
-        preview = msg.text[:200]
-        if len(msg.text) > 200:
-            preview += "…"
-        lines.append(f"Текст: <i>{preview}</i>")
-    if msg.sent_at:
-        lines.append(f"Отправлено: ✅ {msg.sent_count} получателей")
-    return "\n".join(lines)
 
 
 @router.callback_query(F.data.startswith("marketing_detail:"))
@@ -1304,9 +1294,9 @@ async def callback_marketing_detail(callback: CallbackQuery) -> None:
     if msg is None:
         await callback.answer("Сообщение не найдено.", show_alert=True)
         return
-    preview = _marketing_preview_text(msg)
+    status = f"✅ Отправлено {msg.sent_count} получателям" if msg.sent_at else "📝 Черновик"
     await callback.message.edit_text(
-        f"📩 <b>Сообщение #{msg.id}</b>\n\n{preview}",
+        f"📩 <b>{msg.name or f'Сообщение #{msg.id}'}</b>\n\n{status}",
         reply_markup=marketing_detail_kb(msg.id, already_sent=bool(msg.sent_at)),
     )
     await callback.answer()

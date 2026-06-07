@@ -4,12 +4,14 @@ from tortoise.models import Model
 
 class MarketingMessage(Model):
     id = fields.IntField(pk=True)
+    name = fields.CharField(max_length=100, default="")
     # text | photo | video | animation | sticker | document | audio | voice
     content_type = fields.CharField(max_length=20)
-    file_id = fields.CharField(max_length=256, null=True)
+    # Source of the original message — used for copy_message() broadcast
+    source_chat_id = fields.BigIntField()
+    source_message_id = fields.IntField()
+    # Plain text/caption for admin preview only (no formatting)
     text = fields.TextField(null=True)
-    # JSON-serialised list of MessageEntity dicts (preserves bold, italic, etc.)
-    entities_json = fields.TextField(null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     sent_at = fields.DatetimeField(null=True)
     sent_count = fields.IntField(default=0)

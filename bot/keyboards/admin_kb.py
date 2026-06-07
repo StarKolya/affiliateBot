@@ -403,10 +403,7 @@ def marketing_menu_kb(messages) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="✉️ Создать новую рассылку", callback_data="marketing_create")
     for msg in messages:
-        label = msg.content_type
-        if msg.text:
-            preview = msg.text[:30].replace("\n", " ")
-            label = f"{preview}…" if len(msg.text) > 30 else preview
+        label = msg.name or f"#{msg.id}"
         sent_info = f" | ✅ {msg.sent_count}" if msg.sent_at else " | черновик"
         builder.button(text=f"{label}{sent_info}", callback_data=f"marketing_detail:{msg.id}")
     builder.adjust(1)

@@ -50,5 +50,6 @@ class CreateQuestionStates(StatesGroup):
 
 
 class CreateMarketingStates(StatesGroup):
+    waiting_for_name = State()
     waiting_for_message = State()
     confirm = State()

@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", env_ignore_empty=True)
 
     BOT_TOKEN: str
 
@@ -20,8 +20,8 @@ class Settings(BaseSettings):
 
     BOT_USERNAME: str
 
-    # Channel to notify on every new applicant
-    APPLICANT_NOTIFICATIONS_CHANNEL_ID: int
+    # Channel to notify on every new applicant (optional — leave blank to disable)
+    APPLICANT_NOTIFICATIONS_CHANNEL_ID: int | None = None
 
     # Comma-separated telegram IDs bootstrapped as admins on first startup
     ADMIN_TELEGRAM_IDS: list[int] = []

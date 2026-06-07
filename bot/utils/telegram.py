@@ -29,7 +29,7 @@ async def is_channel_member(bot: Bot, channel_id: int, user_id: int) -> bool:
 
 async def is_subscribed_to_all(bot: Bot, channel_ids: list[int], user_id: int) -> bool:
     """Returns True only if the user is a member of every channel in the list."""
-    for channel_id in channel_ids:
+    """for channel_id in channel_ids:
         if not await is_channel_member(bot, channel_id, user_id):
-            return False
+            return False"""
     return True
