@@ -333,7 +333,7 @@ async def _finish_application(target: Message, data: dict, bot: Bot) -> None:
     except ValueError:
         await target.answer("Вы уже откликались на эту вакансию.")
         return
-    await target.answer("<b>🟢 Ваша заявка принята! Менеджер свяжеться с вами 🫵</b>", parse_mode="HTML")
+    await target.answer("<b>🟢 Ваша заявка принята! Менеджер свяжеться с вами 🫵\n\n🧠 Либо напишите сами - @Andromeda_FeedBack</b>", parse_mode="HTML")
     full_application = await application_service.get_application(application.id)
     if full_application:
         await notify_new_applicant(bot, full_application)
