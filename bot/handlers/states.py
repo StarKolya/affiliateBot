@@ -47,3 +47,8 @@ class CreateQuestionStates(StatesGroup):
     enter_title = State()
     enter_description = State()
     select_answer_type = State()
+
+
+class CreateMarketingStates(StatesGroup):
+    waiting_for_message = State()
+    confirm = State()

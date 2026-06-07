@@ -33,6 +33,7 @@ from bot.keyboards.user_kb import (
     subscription_check_kb,
 )
 from bot.services import application_service, job_service, payout_service, referral_service, user_service
+from bot.services.notification_service import notify_new_applicant
 from bot.utils.logger import get_logger
 from bot.utils.telegram import is_subscribed_to_all
 
@@ -261,7 +262,7 @@ def _format_job(job) -> str:
 
 
 @router.callback_query(F.data.startswith("apply:"))
-async def callback_apply(callback: CallbackQuery, state: FSMContext) -> None:
+async def callback_apply(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
     job_id = int(callback.data.split(":")[1])
     account = await user_service.get_by_telegram_id(callback.from_user.id)
     if account is None:
@@ -277,7 +278,7 @@ async def callback_apply(callback: CallbackQuery, state: FSMContext) -> None:
 
     if not questions:
         try:
-            await application_service.start_application(
+            application = await application_service.start_application(
                 account_id=account.id,
                 job_id=job_id,
                 referred_by_code=account.referred_by_code,
@@ -288,6 +289,9 @@ async def callback_apply(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.message.delete()
         await callback.message.answer("✅ Ваша заявка отправлена!")
         await callback.answer()
+        full_application = await application_service.get_application(application.id)
+        if full_application:
+            await notify_new_applicant(bot, full_application)
         return
 
     await state.set_state(ApplyStates.answering)
@@ -315,7 +319,7 @@ def _question_kb(q: dict):
     return apply_yesno_kb() if q["type"] == "yes_no" else apply_cancel_kb()
 
 
-async def _finish_application(target: Message, data: dict) -> None:
+async def _finish_application(target: Message, data: dict, bot: Bot) -> None:
     try:
         application = await application_service.start_application(
             account_id=data["account_id"],
@@ -330,10 +334,13 @@ async def _finish_application(target: Message, data: dict) -> None:
         await target.answer("Вы уже откликались на эту вакансию.")
         return
     await target.answer("<b>🟢 Ваша заявка принята! Менеджер свяжеться с вами 🫵</b>", parse_mode="HTML")
+    full_application = await application_service.get_application(application.id)
+    if full_application:
+        await notify_new_applicant(bot, full_application)
 
 
 @router.message(ApplyStates.answering)
-async def fsm_collect_answer(message: Message, state: FSMContext) -> None:
+async def fsm_collect_answer(message: Message, state: FSMContext, bot: Bot) -> None:
     data = await state.get_data()
     questions = data["questions"]
     index = data["index"]
@@ -363,11 +370,11 @@ async def fsm_collect_answer(message: Message, state: FSMContext) -> None:
         return
 
     await state.clear()
-    await _finish_application(message, {**data, "answers": answers})
+    await _finish_application(message, {**data, "answers": answers}, bot)
 
 
 @router.callback_query(ApplyStates.answering, F.data.startswith("apply_yesno:"))
-async def callback_apply_yesno(callback: CallbackQuery, state: FSMContext) -> None:
+async def callback_apply_yesno(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
     data = await state.get_data()
     questions = data["questions"]
     index = data["index"]
@@ -389,7 +396,7 @@ async def callback_apply_yesno(callback: CallbackQuery, state: FSMContext) -> No
 
     await state.clear()
     await callback.message.edit_reply_markup(reply_markup=None)
-    await _finish_application(callback.message, {**data, "answers": answers})
+    await _finish_application(callback.message, {**data, "answers": answers}, bot)
     await callback.answer()
 
 

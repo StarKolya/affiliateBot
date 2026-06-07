@@ -20,6 +20,9 @@ class Settings(BaseSettings):
 
     BOT_USERNAME: str
 
+    # Channel to notify on every new applicant
+    APPLICANT_NOTIFICATIONS_CHANNEL_ID: int
+
     # Comma-separated telegram IDs bootstrapped as admins on first startup
     ADMIN_TELEGRAM_IDS: list[int] = []
 

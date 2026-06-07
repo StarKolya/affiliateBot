@@ -1,13 +1,14 @@
+import asyncio
 from decimal import Decimal
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.filters import IsAdmin
-from bot.handlers.states import AdminPayStates, CreateJobStates, CreateNicheStates, CreateQuestionStates, FilterApplicationsStates, ManageAdminStates
+from bot.handlers.states import AdminPayStates, CreateJobStates, CreateMarketingStates, CreateNicheStates, CreateQuestionStates, FilterApplicationsStates, ManageAdminStates
 from bot.keyboards.admin_kb import (
     APPS_PAGE_SIZE,
     FINANCE_PAGE_SIZE,
@@ -31,6 +32,10 @@ from bot.keyboards.admin_kb import (
     jobs_manage_list_kb,
     jobs_manage_niche_kb,
     jobs_menu_kb,
+    marketing_cancel_kb,
+    marketing_confirm_kb,
+    marketing_detail_kb,
+    marketing_menu_kb,
     niche_delete_confirm_kb,
     niche_detail_kb,
     niches_manage_kb,
@@ -45,8 +50,9 @@ from bot.keyboards.admin_kb import (
     referrers_list_kb,
     skip_kb,
 )
-from bot.services import application_service, job_service, payout_service, referral_service
+from bot.services import application_service, job_service, marketing_service, payout_service, referral_service
 from bot.models.account import Account, Role
+from bot.models.marketing import MarketingMessage
 from bot.models.referral import Referral
 from bot.utils.logger import get_logger
 
@@ -1198,3 +1204,185 @@ async def callback_mgmt_set_role(callback: CallbackQuery) -> None:
     role_label = _ROLE_DISPLAY.get(role_key, role_key)
     await callback.answer(f"✅ {tag} → {role_label}", show_alert=True)
     await _show_admins_list(callback.message)
+
+
+# --- Marketing ---
+
+async def _show_marketing_menu(target: Message, edit: bool = True) -> None:
+    messages = await marketing_service.list_recent(10)
+    text = "📢 <b>Рассылка</b>\n\nВыберите сообщение для просмотра или создайте новое:"
+    kb = marketing_menu_kb(messages)
+    if edit:
+        await target.edit_text(text, reply_markup=kb)
+    else:
+        await target.answer(text, reply_markup=kb)
+
+
+@router.message(F.text == "📢 Рассылка")
+async def cmd_marketing(message: Message) -> None:
+    if await _get_role(message.from_user.id) not in _SUPERADMIN_ROLES:
+        return
+    await _show_marketing_menu(message, edit=False)
+
+
+@router.callback_query(F.data == "marketing_menu")
+async def callback_marketing_menu(callback: CallbackQuery) -> None:
+    if await _get_role(callback.from_user.id) not in _SUPERADMIN_ROLES:
+        await callback.answer("Нет доступа.", show_alert=True)
+        return
+    await _show_marketing_menu(callback.message)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "marketing_create")
+async def callback_marketing_create(callback: CallbackQuery, state: FSMContext) -> None:
+    if await _get_role(callback.from_user.id) not in _SUPERADMIN_ROLES:
+        await callback.answer("Нет доступа.", show_alert=True)
+        return
+    await state.set_state(CreateMarketingStates.waiting_for_message)
+    await callback.message.edit_text(
+        "✉️ <b>Новая рассылка</b>\n\n"
+        "Перешлите или отправьте подготовленное сообщение.\n"
+        "Поддерживаются: текст, фото, видео, GIF, стикер, документ, аудио, голосовое.\n"
+        "Все стили (жирный, курсив, эмодзи и пр.) сохранятся.",
+        reply_markup=marketing_cancel_kb(),
+    )
+    await callback.answer()
+
+
+@router.message(CreateMarketingStates.waiting_for_message)
+async def fsm_marketing_receive_message(message: Message, state: FSMContext) -> None:
+    data = marketing_service.extract_from_message(message)
+    if data is None:
+        await message.answer(
+            "❌ Этот тип сообщения не поддерживается. Попробуйте другой.",
+            reply_markup=marketing_cancel_kb(),
+        )
+        return
+
+    msg_obj = await MarketingMessage.create(**data)
+    await state.clear()
+
+    preview = _marketing_preview_text(msg_obj)
+    await message.answer(
+        f"👁 <b>Предпросмотр сохранён:</b>\n\n{preview}\n\n"
+        "Перейдите в меню рассылки, чтобы разослать или удалить.",
+        reply_markup=marketing_detail_kb(msg_obj.id, already_sent=False),
+    )
+
+
+def _marketing_preview_text(msg: MarketingMessage) -> str:
+    type_label = {
+        "text": "📝 Текст",
+        "photo": "🖼 Фото",
+        "video": "🎬 Видео",
+        "animation": "🎞 GIF",
+        "sticker": "🎭 Стикер",
+        "document": "📎 Документ",
+        "audio": "🎵 Аудио",
+        "voice": "🎤 Голосовое",
+    }.get(msg.content_type, msg.content_type)
+
+    lines = [f"Тип: {type_label}"]
+    if msg.text:
+        preview = msg.text[:200]
+        if len(msg.text) > 200:
+            preview += "…"
+        lines.append(f"Текст: <i>{preview}</i>")
+    if msg.sent_at:
+        lines.append(f"Отправлено: ✅ {msg.sent_count} получателей")
+    return "\n".join(lines)
+
+
+@router.callback_query(F.data.startswith("marketing_detail:"))
+async def callback_marketing_detail(callback: CallbackQuery) -> None:
+    if await _get_role(callback.from_user.id) not in _SUPERADMIN_ROLES:
+        await callback.answer("Нет доступа.", show_alert=True)
+        return
+    msg_id = int(callback.data.split(":")[1])
+    msg = await marketing_service.get_by_id(msg_id)
+    if msg is None:
+        await callback.answer("Сообщение не найдено.", show_alert=True)
+        return
+    preview = _marketing_preview_text(msg)
+    await callback.message.edit_text(
+        f"📩 <b>Сообщение #{msg.id}</b>\n\n{preview}",
+        reply_markup=marketing_detail_kb(msg.id, already_sent=bool(msg.sent_at)),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("marketing_send:"))
+async def callback_marketing_send(callback: CallbackQuery) -> None:
+    if await _get_role(callback.from_user.id) not in _SUPERADMIN_ROLES:
+        await callback.answer("Нет доступа.", show_alert=True)
+        return
+    msg_id = int(callback.data.split(":")[1])
+    msg = await marketing_service.get_by_id(msg_id)
+    if msg is None:
+        await callback.answer("Сообщение не найдено.", show_alert=True)
+        return
+    if msg.sent_at:
+        await callback.answer("Это сообщение уже было разослано.", show_alert=True)
+        return
+    total = await Account.all().count()
+    await callback.message.edit_text(
+        f"⚠️ <b>Подтверждение рассылки</b>\n\n"
+        f"Сообщение будет отправлено <b>{total}</b> пользователям.\n"
+        "Это действие нельзя отменить после запуска.",
+        reply_markup=marketing_confirm_kb(msg_id),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("marketing_confirm:"))
+async def callback_marketing_confirm(callback: CallbackQuery, bot: Bot) -> None:
+    if await _get_role(callback.from_user.id) not in _SUPERADMIN_ROLES:
+        await callback.answer("Нет доступа.", show_alert=True)
+        return
+    msg_id = int(callback.data.split(":")[1])
+    msg = await marketing_service.get_by_id(msg_id)
+    if msg is None:
+        await callback.answer("Сообщение не найдено.", show_alert=True)
+        return
+    if msg.sent_at:
+        await callback.answer("Это сообщение уже было разослано.", show_alert=True)
+        return
+
+    status_message = await callback.message.edit_text("🚀 Рассылка запущена…")
+    await callback.answer()
+
+    async def _update_progress(sent: int, total: int) -> None:
+        try:
+            await status_message.edit_text(f"🚀 Рассылка: {sent}/{total}…")
+        except Exception:
+            pass
+
+    total = await Account.all().count()
+
+    async def _run_broadcast() -> None:
+        sent = await marketing_service.broadcast(bot, msg, status_callback=_update_progress)
+        try:
+            await status_message.edit_text(
+                f"✅ Рассылка завершена!\nОтправлено: <b>{sent}/{total}</b>",
+                reply_markup=marketing_detail_kb(msg.id, already_sent=True),
+            )
+        except Exception:
+            pass
+
+    asyncio.create_task(_run_broadcast())
+
+
+@router.callback_query(F.data.startswith("marketing_delete:"))
+async def callback_marketing_delete(callback: CallbackQuery) -> None:
+    if await _get_role(callback.from_user.id) not in _SUPERADMIN_ROLES:
+        await callback.answer("Нет доступа.", show_alert=True)
+        return
+    msg_id = int(callback.data.split(":")[1])
+    msg = await marketing_service.get_by_id(msg_id)
+    if msg is None:
+        await callback.answer("Сообщение не найдено.", show_alert=True)
+        return
+    await msg.delete()
+    await callback.answer("🗑 Удалено.", show_alert=True)
+    await _show_marketing_menu(callback.message)

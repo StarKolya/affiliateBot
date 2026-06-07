@@ -35,6 +35,7 @@ def admin_menu_kb(role: str = "admin") -> ReplyKeyboardMarkup:
         builder.button(text="💼 Вакансии")
         builder.button(text="🏷 Ниши")
         builder.button(text="❓ Вопросы")
+        builder.button(text="📢 Рассылка")
         builder.button(text="👑 Управление")
     builder.adjust(2)
     return builder.as_markup(resize_keyboard=True)
@@ -393,4 +394,45 @@ def payout_action_kb(payout_id: int) -> InlineKeyboardMarkup:
     builder.button(text="❌ Отклонить", callback_data=f"admin_payout_reject:{payout_id}")
     builder.button(text="⬅️ Назад", callback_data="admin_finance")
     builder.adjust(2, 1)
+    return builder.as_markup()
+
+
+# --- Marketing ---
+
+def marketing_menu_kb(messages) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✉️ Создать новую рассылку", callback_data="marketing_create")
+    for msg in messages:
+        label = msg.content_type
+        if msg.text:
+            preview = msg.text[:30].replace("\n", " ")
+            label = f"{preview}…" if len(msg.text) > 30 else preview
+        sent_info = f" | ✅ {msg.sent_count}" if msg.sent_at else " | черновик"
+        builder.button(text=f"{label}{sent_info}", callback_data=f"marketing_detail:{msg.id}")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def marketing_detail_kb(msg_id: int, already_sent: bool) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    if not already_sent:
+        builder.button(text="🚀 Разослать всем", callback_data=f"marketing_send:{msg_id}")
+    builder.button(text="🗑 Удалить", callback_data=f"marketing_delete:{msg_id}")
+    builder.button(text="⬅️ Назад", callback_data="marketing_menu")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def marketing_confirm_kb(msg_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Подтвердить рассылку", callback_data=f"marketing_confirm:{msg_id}")
+    builder.button(text="❌ Отмена", callback_data=f"marketing_detail:{msg_id}")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def marketing_cancel_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="❌ Отмена", callback_data="marketing_menu")
+    builder.adjust(1)
     return builder.as_markup()

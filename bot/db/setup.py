@@ -14,6 +14,7 @@ TORTOISE_ORM = {
                 "bot.models.application",
                 "bot.models.referral",
                 "bot.models.payout",
+                "bot.models.marketing",
                 "aerich.models",
             ],
             "default_connection": "default",
